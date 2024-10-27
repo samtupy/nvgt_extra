@@ -1,0 +1,7 @@
+# Fast plugin
+
+This plugin offers faster versions of many of NVGT's built-in functions, as well as functionality not present in the engine proper. This plugin is primarily useful for processing large amounts of data. Though performance gains may be exhibited on smaller inputs, it may not be as much as expected, and is holy dependent on far too many characteristics to fully enumerate (ie. operating system, whether your on an HDD, SSD, or NVMe, whether your on a network share, etc). The plugin offers low-level, fast functions when you've got that need for speed, while trying to make the interfaces simpler than what your operating system or libc/glibc may provide.
+
+This plugin uses [sleef](https://github.com/shibatch/sleef) and [llfio](https://ned14.github.io/llfio) internally. Some of the documentation (e.g. for fast IO) is duplicated here for easier reference and understanding in the context of NVGT. In particular, the fast IO functions can be used by individuals unfamiliar with OS caching, disk controllers, etc., as long as they don't modify any of the modes or flags. This library deliberately does not perform checks that normally would be performed for performance reasons (i.e., you are expected to validate the input yourself).
+
+This plugin is still in early alpha. If something breaks, feel free to file an issue, and don't hesitate to contribute! The code for this plugin is placed into the public domain, though the libraries it uses may not be.
