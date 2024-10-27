@@ -1,10 +1,10 @@
 Import("env")
 
 scriptarray = env.SharedObject("scriptarray", "#ASAddon/plugin/scriptarray.cpp")
-env.Append(CPPPATH=["#extra/plugin/dep/uni_algo"])
+env.Append(CPPPATH=["#extra/plugin/dep"])
 if ARGUMENTS.get("no_shared_plugins", "0") == "0":
-	env.SharedLibrary("#release/lib/unicode", ["unicode.cpp", "#extra/plugin/dep/uni_algo/unicode_algo_data.cpp", scriptarray], LIBS = [])
+	env.SharedLibrary("#release/lib/unicode", ["unicode.cpp", "#extra/plugin/dep/uni_algo/data.cpp", scriptarray], LIBS = [])
 unicode_obj = env.Object("unicode_static", "unicode.cpp", CPPDEFINES = [("NVGT_PLUGIN_STATIC", "unicode_plugin")])
-data_obj = env.Object("data_static", "#extra/plugin/dep/uni_algo/uni_algo_data.cpp", CPPDEFINES = [("NVGT_PLUGIN_STATIC", "unicode_plugin")])
+data_obj = env.Object("data_static", "#extra/plugin/dep/uni_algo/data.cpp", CPPDEFINES = [("NVGT_PLUGIN_STATIC", "unicode_plugin")])
 static = env.StaticLibrary("#build/lib/unicode", [unicode_obj, data_obj])
 Return("static")
