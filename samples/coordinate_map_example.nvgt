@@ -1,0 +1,31 @@
+//Assuming a class exists called tile
+class tile {
+	string type;
+	tile(string type) {
+		this.type = type;
+	}
+}
+coordinate_map m;
+//You want to store handles to this type in your coordinate map, not direct copies of objects. Note the several extra @ characters.
+
+int priority_counter = 0; // Usually this would be the line number being read in a map parser. It's used to control what tiles appear on top of each other.
+void add_tile(int minx, int maxx, int miny, int maxy, int minz, int maxz, double rotation, string type)
+{
+m.add_area(minx, maxx, miny, maxy, minz, maxz, rotation, @tile(type), type, "", "", ++priority_counter, 1<<3);
+}
+tile@ get_tile(int x, int y, int z)
+{
+coordinate_map_area@ t = m.get_area(x, y, z, -1, 0, null, 1<<3);
+if (@t == null) return null; // No tile here!
+tile@ data;
+t.primary_data.retrieve(@data);
+return data;
+}
+void main()
+{
+add_tile(0, 10, 0, 10, 0, 10, 0, "grass");
+tile@ r = get_tile(0, 0, 0);
+if (@r == null) alert("oops", "no tile at this location");
+else alert("result is ", r.type);
+}
+

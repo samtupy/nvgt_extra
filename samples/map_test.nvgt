@@ -1,0 +1,42 @@
+// This is a demonstration of the high level map.nvgt include, not to be confused with coordinate_map_example.nvgt which demonstrates NVGT's builtin coordinate map.
+
+#include "../includes/map.nvgt"
+
+// Define a test map.
+string map_code = """
+	void map() {
+		set_description("This is a test map");
+		seed(42);
+		tile(0, 30, 0, 30, 0, 0, choice({"water", "grass", "concrete"}));
+	}
+""";
+
+// This shows how you can inherit from the base map class, which is optional. Lets add descriptions.
+class my_map : map {
+	string description;
+}
+// Register the set_description function for use in map code.
+namespace map_functions {
+	void set_description(string description) { cast<my_map@>(map).description = description; }
+}
+
+void main() {
+	string[] err; // This will contain any errors produced by the map loading.
+	my_map@ m = cast<my_map@>(load_map(map_code, true, my_map(), err));
+	if (@m == null) {
+		alert("fail", join(err, "\r\n"));
+		exit();
+	}
+	alert(m.description, m.get_tile(15, 15, 0));
+	string bytecode = compile_map(map_code, false, err);
+	if (bytecode.empty()) {
+		alert("can't compile map", join(err, "\r\n"));
+		return;
+	}
+	@m = cast<my_map@>(load_map(bytecode, false, my_map(), err));
+	if (@m == null) {
+		alert("fail", join(err, "\r\n"));
+		exit();
+	}
+	alert(m.description, m.get_tile(15, 15, 0));
+}

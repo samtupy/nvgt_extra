@@ -1,0 +1,133 @@
+/* map.nvgt - subscripting oriented high-level 3d map implementation
+ * This allows for the loading of map data from Angelscript code, and includes a function to produce bytecode from the source code of a map for transfer over the network.
+ *
+ * NVGT - NonVisual Gaming Toolkit
+ * Copyright (c) 2022-2024 Sam Tupy
+ * https://nvgt.gg
+ * This software is provided "as-is", without any express or implied warranty. In no event will the authors be held liable for any damages arising from the use of this software.
+ * Permission is granted to anyone to use this software for any purpose, including commercial applications, and to alter it and redistribute it freely, subject to the following restrictions:
+ * 1. The origin of this software must not be misrepresented; you must not claim that you wrote the original software. If you use this software in a product, an acknowledgment in the product documentation would be appreciated but is not required.
+ * 2. Altered source versions must be plainly marked as such, and must not be misrepresented as being the original software.
+ * 3. This notice may not be removed or altered from any source distribution.
+*/
+
+#include "nvgt_subsystems.nvgt"
+enum map_flags {
+	MAP_TILE = 1 << 0,
+	MAP_ZONE = 1 << 1
+}
+
+// The map class, which you could inherit from if you like.
+class map {
+	coordinate_map impl;
+	int priority_counter = 0;
+	random_pcg rng;
+	void add_area(const vector&in min, const vector&in max, const string&in data, int64 flags) {
+		impl.add_area(min.x, max.x, min.y, max.y, min.z, max.z, 0.0, null, data, "", "", priority_counter++, flags);
+	}
+	void add_tile(float minx, float maxx, float miny, float maxy, float minz, float maxz, const string&in type) {
+		add_area(vector(minx, miny, minz), vector(maxx, maxy, maxz), type, MAP_TILE);
+	}
+	void add_zone(float minx, float maxx, float miny, float maxy, float minz, float maxz, const string&in text) {
+		add_area(vector(minx, miny, minz), vector(maxx, maxy, maxz), text, MAP_ZONE);
+	}
+	string get_area_data(const vector&in point, int64 flags) {
+		coordinate_map_area@ a = impl.get_area(point.x, point.y, point.z, -1, 0.0, null, flags);
+		if (@a == null) return "";
+		return a.data1;
+	}
+	string get_tile(float x, float y, float z) {
+		return get_area_data(vector(x, y, z), MAP_TILE);
+	}
+	string get_zone(float x, float y, float z) {
+		return get_area_data(vector(x, y, z), MAP_ZONE);
+	}
+}
+
+// The following is the map loader class itself. Though there are public global functions to load simple maps for basic use cases, you may often find yourself wishing to load functions from another namespace, provide for sectioned includes or use a different map construction factory in which case you would want to make your own map_loader instance instead of using the default.
+class map_loader {
+	funcdef map@ factory_callback();
+	factory_callback@ map_factory = function() { return map(); }; // If this class is inherited from, you can override this factory to insure that the constructor of your child class is called when creating a map instead of just the base map constructor.
+	string map_header_code; // Any code here is automatically included into any map that is compiled. You could put common functions here, for example.
+	map@ load_map(const string&in code, bool allow_compilation, map@ map_object, string[]@ err) {
+		@g_loading_map = @map_object != null? @map_object : map_factory();
+		if (!build_map(code, allow_compilation, err)) {
+			@g_loading_map = null;
+			return null;
+		}
+		for (uint i = 0; i < map_functions_list.length(); i++) map_loader_module.bind_imported_function(i, map_functions_list[i]);
+		script_function@ map_func = map_loader_module.get_function_by_decl("void map()");
+		if (@map_func == null) {
+			if (@err != null) err.insert_last("No 'void map()' function found!");
+			return null;
+		}
+		dictionary@ r = map_func({}, err);
+		map@ tmp = @r != null? g_loading_map : null;
+		@g_loading_map = null;
+		return tmp;
+	}
+	string compile_map(const string&in data, bool strip_debug = false, string[]@ err = null) {
+		if (!build_map(data, true, err)) return "";
+		return map_loader_module.get_bytecode(strip_debug);
+	}
+	void set_function_namespace(const string&in ns) property {
+		if (ns.empty()) throw("map functions must exist in a valid namespace");
+		map_functions_namespace = ns;
+	}
+	string get_functions_namespace() const property {
+		return map_functions_namespace;
+	}
+	// Private
+	private script_module@ map_loader_module = script_get_module("map_loader", 1);
+	private script_function@[] map_functions_list;
+	private string map_functions_namespace = "map_functions";
+	private string map_loader_imports;
+	// Loops through all functions in the nvgt_game module and prepares any found in the map_functions_namespace for importing.
+	private void setup_map_loader_imports() {
+		if (!map_loader_imports.empty()) return;
+		script_module@ game = script_get_module("nvgt_game", 0);
+		string header;
+		for (uint i = 0; i < game.get_function_count(); i++) {
+			script_function@ func = game.get_function_by_index(i);
+			if (func.get_namespace() != map_functions_namespace or func.name == "get_map") continue;
+			header += "import " + func.get_decl(true, false)+" from \"nvgt_game\";\r\n";
+			map_functions_list.insert_last(func);
+		}
+		map_loader_imports = header;
+	}
+	private bool build_map(const string&in code, bool allow_compilation, string[]@ err = {}) {
+		if (code.empty()) return false;
+		setup_map_loader_imports();
+		map_loader_module.set_access_mask(NVGT_SUBSYSTEM_SCRIPTING_SANDBOX);
+		int br;
+		if (allow_compilation and code[0] != "\x00" and code[0] != "\x01") { // source code
+			map_loader_module.add_section("imports", map_loader_imports);
+			if (!map_header_code.empty()) map_loader_module.add_section("header", map_header_code);
+			map_loader_module.add_section("map", code);
+			br = map_loader_module.build(err);
+		} else { // bytecode
+			bool debug_stripped;
+			br = map_loader_module.set_bytecode(code, debug_stripped, err);
+		}
+		return  br >= 0;
+	}
+}
+map@ g_loading_map; // Todo: make this use TLS once we've implemented it into NVGT.
+
+// Highest level map loading functions.
+map_loader@ g_map_loader = map_loader(); // You can set this property to your own map_loader instance if you want to use the below functions on that instance instead of this default.
+map@ load_map(const string&in code, bool allow_compilation = true, map@ map_object = null, string[]@ err = null) { return g_map_loader.load_map(code, allow_compilation, map_object, err); }
+string compile_map(const string&in data, bool strip_debug = false, string[]@ err = null) { return g_map_loader.compile_map(data, strip_debug, err); }
+
+// This namespace contains all functions that are callable from map code. You should extend it to add any functions you want map creators to be able to access. The get_map function at the top is an edgecase that is excluded.
+namespace map_functions {
+	map@ get_map() property { return g_loading_map; }
+	void tile(float minx, float maxx, float miny, float maxy, float minz, float maxz, const string&in type) { map.add_tile(minx, maxx, miny, maxy, minz, maxz, type); }
+	void zone(float minx, float maxx, float miny, float maxy, float minz, float maxz, const string&in text) { map.add_zone(minx, maxx, miny, maxy, minz, maxz, text); }
+	string tile_at(float x, float y, float z) { return map.get_tile(x, y, z); }
+	string zone_at(float x, float y, float z) { return map.get_zone(x, y, z); }
+	void seed(uint seed = random_seed()) { map.rng.seed(seed); }
+	int r(int min, int max) { return map.rng.range(min, max); }
+	string choice(string[]@ choices) { return choices[r(0, choices.length() -1)]; }
+}
+

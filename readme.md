@@ -5,4 +5,4 @@ NVGT's main repository is rather small and contains what we would consider to be
 
 This repository on the other hand contains far fewer restrictions on what may be included. So long as the licensing of any included material is permissive, it is OK if a plugin in this repository pulls in another dependency to build, or if an example game contains some sound files (again keeping in mind licensing restrictions).
 
-Plugins in this repository are still expected to follow the standard shown in nvgt's main repository in regards to the formatting of the plugin directory and the _SConscript files therein. NVGT's main SConstruct file will check for a directory called extra/plugins during the build, and thus any plugins in that directory will be built along side NVGT.
+Within the plugin/integrated directory, plugins in this repository are still expected to follow the standard shown in nvgt's main repository in regards to the formatting of the plugin directory and the _SConscript files therein. NVGT's main SConstruct file will check for a directory called extra/plugin/integrated during the build, and thus any plugins in that directory will be built along side NVGT.
