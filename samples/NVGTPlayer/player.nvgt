@@ -1,0 +1,36 @@
+#include "speech.nvgt"
+
+sound player;
+
+void main() {
+	load_url();
+	show_window("NVGT Player");
+	
+	while(true) loop();
+}
+
+void load_url() {
+	const string url = input_box("URL", "Enter the direct URL of a stream you would like to load.", "https://nwm.streamguys1.com/ktis-fm");
+	speak("Loading " + url + "...");
+	if (!player.load_url(url)) {
+		alert("Error", "There was an error loading the specified URL.");
+		exit();
+	}
+	// Set to a hopefully sane volume.
+	player.volume = -40;
+	player.play();
+}
+
+void loop() {
+	wait(5);
+	
+	if (key_pressed(KEY_SPACE)) {
+		if (player.playing) player.pause();
+		else player.play();
+		speak((player.playing?"Playing.":"Paused."));
+	}
+	if (key_down(KEY_UP)) player.volume = player.volume+1;
+	if(key_down(KEY_DOWN)) player.volume=player.volume-1;
+	if(key_pressed(KEY_V)) speak(round(player.volume, 2));
+	if(key_pressed(KEY_ESCAPE)) exit();
+}
