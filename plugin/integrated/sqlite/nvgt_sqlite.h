@@ -13,8 +13,8 @@
 #include <string>
 #include "../../src/nvgt_plugin.h"
 #include <scriptarray.h>
-#include "sqlite3.h"
-#include "sqlite3exts.h"
+#include <sqlite3.h>
+#include <sqlite3exts.h>
 
 class sqlite3DB;
 class sqlite3statement {
