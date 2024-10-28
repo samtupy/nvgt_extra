@@ -625,7 +625,7 @@ uint64_t pack::size() {
 	return size;
 }
 
-blob_stream pack::open_file(const std::string& file_name, const bool rw) {
+blob_stream pack::open_file_stream(const std::string& file_name, const bool rw) {
 	if (!file_exists(file_name)) throw ios_base::failure(Poco::format("File %s does not exist", file_name));
 	sqlite3_stmt* stmt;
 	int64_t rowid = 0;
@@ -658,6 +658,52 @@ blob_stream pack::open_file(const std::string& file_name, const bool rw) {
 	}
 	sqlite3_finalize(stmt);
 	return blob_stream(db, "main", "pack_files", "data", rowid, rw);
+}
+
+void pack::allocate_file(const string& file_name, const int64_t size, const bool allow_replace) {
+	if (file_exists(file_name)) {
+		if (allow_replace) {
+			delete_file(file_name);
+		} else {
+			throw runtime_error(Poco::format("Could not allocate file %s because it already exists", file_name));
+		}
+	}
+	sqlite3_stmt* stmt;
+	if (const auto rc = sqlite3_prepare_v3(db, "insert into pack_files values(?, ?)", -1, 0, &stmt, nullptr); rc != SQLITE_OK) {
+		throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
+	}
+	if (const auto rc = sqlite3_bind_text64(stmt, 1, file_name.data(), file_name.size(), SQLITE_STATIC, SQLITE_UTF8); rc != SQLITE_OK) {
+		sqlite3_finalize(stmt);
+		throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
+	}
+	if (const auto rc = sqlite3_bind_zeroblob64(stmt, 2, size); rc != SQLITE_OK) {
+		sqlite3_finalize(stmt);
+		throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
+	}
+	while (true) {
+		const auto rc = sqlite3_step(stmt);
+		if (rc == SQLITE_BUSY)
+			if (sqlite3_get_autocommit(db)) {
+				sqlite3_reset(stmt);
+				continue;
+			} else {
+				sqlite3_exec(db, "rollback", nullptr, nullptr, nullptr);
+				sqlite3_reset(stmt);
+				continue;
+			}
+		else if (rc == SQLITE_DONE) break;
+		else {
+			if (!sqlite3_get_autocommit(db)) sqlite3_exec(db, "rollback", nullptr, nullptr, nullptr);
+			sqlite3_finalize(stmt);
+			throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
+		}
+	}
+	sqlite3_finalize(stmt);
+}
+
+void* pack::open_file(const std::string& file_name, const bool rw) {
+	blob_stream stream = open_file_stream(file_name, rw);
+	return nvgt_datastream_create(&stream, "", 1);
 }
 
 blob_stream_buf::blob_stream_buf(): Poco::BufferedBidirectionalStreamBuf(4096, ios::in) {
@@ -808,5 +854,7 @@ void RegisterScriptPack(asIScriptEngine* engine) {
 	engine->RegisterObjectMethod("sqlite_pack", "string read_file(const string &in pack_filename, uint offset_in_file, uint read_byte_count) const", asMETHOD(pack, read_file_string), asCALL_THISCALL);
 	engine->RegisterObjectMethod("sqlite_pack", "bool get_active() const property", asMETHOD(pack, is_active), asCALL_THISCALL);
 	engine->RegisterObjectMethod("sqlite_pack", "uint get_size() const property", asMETHOD(pack, size), asCALL_THISCALL);
+	engine->RegisterObjectMethod("sqlite_pack", "datastream@ open_file(const string& file_name, const bool rw)", asMETHODPR(pack, open_file, (const string &, const bool), void*), asCALL_THISCALL);
+	engine->RegisterObjectMethod("sqlite_pack", "void allocate_file(const string& file_name, const int64 size, const bool allow_replace = false)", asMETHODPR(pack, allocate_file, (const string&, const int64_t, const bool), void), asCALL_THISCALL);
 }
 

@@ -50,7 +50,9 @@ public:
 	bool is_active() {
 		return db;
 	}
-	blob_stream open_file(const std::string& file_name, const bool rw);
+	blob_stream open_file_stream(const std::string& file_name, const bool rw);
+	void* open_file(const std::string& file_name, const bool rw);
+	void allocate_file(const std::string& file_name, const std::int64_t size, const bool allow_replace = false);
 };
 
 class blob_stream_buf: public Poco::BufferedBidirectionalStreamBuf {
