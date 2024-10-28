@@ -8,5 +8,6 @@ I wanted a simple sound player that would allow me to listen to a web stream and
 * Up / down: Adjust volume.
 * V: Report current volume.
 * Space: Play / Pause.
+* M: Mute or unmute the audio.
 * Escape: Exit the program.
 
