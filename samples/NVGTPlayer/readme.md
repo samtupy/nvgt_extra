@@ -7,6 +7,6 @@ I wanted a simple sound player that would allow me to listen to a web stream and
 ## Keys:
 * Up / down: Adjust volume.
 * V: Report current volume.
-* Space: Play / Stop (note that when you play the audio again after pausing it, the stream will reconnect rather than retain its connected state).
+* Space: Play / Pause.
 * Escape: Exit the program.
 

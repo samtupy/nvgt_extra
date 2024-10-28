@@ -1,6 +1,7 @@
 #include "speech.nvgt"
 
 sound player;
+int last_volume = -40;
 
 void main() {
 	load_url();
@@ -16,8 +17,8 @@ void load_url() {
 		alert("Error", "There was an error loading the specified URL.");
 		exit();
 	}
-	// Set to a hopefully sane volume.
-	player.volume = -40;
+	// Set to a hopefully sane volume as declared in last_volume.
+	player.volume = last_volume;
 	player.play();
 }
 
@@ -33,4 +34,9 @@ void loop() {
 	if(key_down(KEY_DOWN)) player.volume=player.volume-1;
 	if(key_pressed(KEY_V)) speak(round(player.volume, 2));
 	if(key_pressed(KEY_ESCAPE)) exit();
+	if (key_pressed(KEY_M)) {
+		if (player.volume > -100) player.volume = -100;
+		else player.volume = last_volume;
+	}
+	if (player.volume > -100) last_volume = player.volume;
 }
