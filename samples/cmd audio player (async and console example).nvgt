@@ -1,0 +1,40 @@
+//I wanted to learn about threading, and specificly reading commands from a NVGT console window. So Sam wrote tis little example for me.
+#pragma console
+sound player;
+
+thread_event has_command, read_command(THREAD_EVENT_MANUAL_RESET);
+string command;
+void read_commands() {
+	while (!read_command.try_wait(5)) {
+		string cmd = cin.read_line();
+		if (cmd.empty()) continue;
+		command = cmd;
+		has_command.set();
+		read_command.wait();
+		read_command.reset();
+	}
+}
+
+void main() {
+	async<void>(read_commands);
+	while (true) {
+		if (has_command.try_wait(5)) { // Command available! The other thread waits for us to read it.
+			parse_command(command);
+			read_command.set();
+		}
+	}
+	read_command.set(); // Other thread uses this event to know when to exit the program.
+}
+
+void parse_command(string cmd) {
+	// In this case, we only play a file.
+	if (!file_exists(cmd)) {
+		cout << "file doesn't exist\n";
+		return;
+	}
+	if (!player.load(cmd)) {
+		cout << "not a valid audio file\n";
+		return;
+	}
+	player.play();
+}
