@@ -1,0 +1,113 @@
+/*parameters
+bool add_material(const std::string& name, float absorption_low, float absorption_mid, float absorption_high, float scattering, float transmission_low, float transmission_mid, float transmission_high, bool replace_if_existing = false);
+    bool add_box(const std::string& material, float minx, float maxx, float miny, float maxy, float minz, float maxz);
+/*
+/*list
+air
+generic
+brick
+concrete
+ceramic
+gravel
+glass
+carpet
+plaster
+wood
+metal
+rock
+*/
+
+#pragma stub upx
+#include "rotation.nvgt"
+sound_environment env;
+sound@ s;
+mixer m;
+float pitch = 100, pan = 0;
+float lx=0.0, ly = 0.0, lz = 0.0, sx = 3, sy = 0.0, sz = 3.0, r = 0.0, pan_step = 1.0, vol_step = 1.0;
+string coords;
+bool loop_mode = true;
+
+void main() {
+	@s = env.new_sound();
+env.add_material("test",0.4,0.6,0.8,0.3,0.9,0.2,0.9,false);
+	s.load_url("http://live.powerhitz.com/00s?aw_0_req.gdpr=true128k (PLS)");
+	s.set_mixer(m);
+	show_window("FX Test");
+//this is the line if you want to change the reverb value
+	m.set_fx("$my_reverb:freeverb:0.30:0.60:0.4:0.3:1.0");
+	
+	env.add_box(input_box("Select a material","Type in a material to use for the box. You can see available types in the commented list in this file"), -10, 10, 5, 5, 0, 10);
+	s.set_position(lx, ly, lz, sx, sy, sz, r, pan_step, vol_step);
+	s.play();
+	while (!key_pressed(KEY_ESCAPE)) {
+		env.update();
+		wait(5);
+		if (key_pressed(KEY_SPACE)) {
+			if (!s.playing) {
+				if (loop_mode) {
+					s.play_looped();
+				} else {
+					s.play();
+				}
+			} else {
+				s.stop();
+			}
+		}
+		if (key_pressed(KEY_L)) {
+			loop_mode = !loop_mode;
+			screen_reader_speak((loop_mode ? "" : "not ") + "looping", true);
+		}
+		if (key_repeating(KEY_UP)) {
+			env.set_listener(lx, ly, lz += 0.1, r);
+		}
+		if (key_repeating(KEY_DOWN)) {
+			env.set_listener(lx, ly, lz -= 0.1, r);
+		}
+		if (key_repeating(KEY_LEFT)) {
+			env.set_listener(lx -= 0.1, ly, lz, r);
+		}
+		if (key_repeating(KEY_RIGHT)) {
+			env.set_listener(lx += 0.1, ly, lz, r);
+		}
+		if (key_repeating(KEY_PAGEUP)) {
+			env.set_listener(lx, ly += 0.1, lz,r);
+		}
+		if (key_repeating(KEY_PAGEDOWN)) {
+			env.set_listener(lx, ly -= 0.1, lz,r);
+		}
+		if (key_repeating(KEY_A)) s.slide_pitch( pitch += 10, 500);
+		if (key_repeating(KEY_Z)) s.slide_pitch( pitch -= 10, 500);
+		if (key_repeating(KEY_Q)) {
+			rotate_left(5);
+		}
+		if (key_repeating(KEY_E)) {
+			rotate_right(5);
+		}
+		if (key_pressed(KEY_F)) {
+			lx=0.0;ly = 0.0;lz = 0.0;sx = 0.0;sy = 0.0;sz = 0.0;r = 0.0;pan_step = 1.0;vol_step = 1.0; pitch = 100;
+			s.slide_pitch(pitch, 100);
+			env.set_listener(lx, ly, lz, r);
+		}
+		if (key_pressed(KEY_C)) {
+			coords = round(lx, 2) + ", " + round(ly, 2) + ", " + round(lz, 2);
+			screen_reader_speak(coords, true);
+		}
+		if (key_pressed(KEY_D)) {
+			screen_reader_speak(round(r, 2), true);
+		}
+	}
+}
+
+
+void rotate_left (const int&in amount) {
+	double rot = turnleft(r, 1);
+	r = int(rot);
+	rot = calculate_theta(rot);
+	env.set_listener(lx, ly, lz, rot);
+}
+void rotate_right (const int&in amount) {
+double rot = turnright(r, 1);
+	r = int(rot);
+	rot = calculate_theta(rot);
+	env.set_listener(lx, ly, lz, rot);	
+}
