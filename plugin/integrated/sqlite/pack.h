@@ -53,6 +53,8 @@ public:
 	blob_stream open_file_stream(const std::string& file_name, const bool rw);
 	void* open_file(const std::string& file_name, const bool rw);
 	void allocate_file(const std::string& file_name, const std::int64_t size, const bool allow_replace = false);
+	bool rename_file(const std::string& old, const std::string& new_);
+	void clear();
 };
 
 class blob_stream_buf: public Poco::BufferedBidirectionalStreamBuf {

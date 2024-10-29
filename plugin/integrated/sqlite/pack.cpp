@@ -701,6 +701,68 @@ void pack::allocate_file(const string& file_name, const int64_t size, const bool
 	sqlite3_finalize(stmt);
 }
 
+bool pack::rename_file(const string& old, const string& new_) {
+	if (!file_exists(old)) return false;
+	sqlite3_stmt* stmt;
+	if (const auto rc = sqlite3_prepare_v3(db, "update pack_files set file_name = ? where file_name = ?", -1, 0, &stmt, nullptr); rc != SQLITE_OK) {
+		throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
+	}
+	if (const auto rc = sqlite3_bind_text64(stmt, 1, old.data(), old.size(), SQLITE_STATIC, SQLITE_UTF8); rc != SQLITE_OK) {
+		sqlite3_finalize(stmt);
+		throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
+	}
+	if (const auto rc = sqlite3_bind_text64(stmt, 2, new_.data(), new_.size(), SQLITE_STATIC, SQLITE_UTF8); rc != SQLITE_OK) {
+		sqlite3_finalize(stmt);
+		throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
+	}
+	while (true) {
+		const auto rc = sqlite3_step(stmt);
+		if (rc == SQLITE_BUSY)
+			if (sqlite3_get_autocommit(db)) {
+				sqlite3_reset(stmt);
+				continue;
+			} else {
+				sqlite3_exec(db, "rollback", nullptr, nullptr, nullptr);
+				sqlite3_reset(stmt);
+				continue;
+			}
+		else if (rc == SQLITE_DONE) break;
+		else {
+			if (!sqlite3_get_autocommit(db)) sqlite3_exec(db, "rollback", nullptr, nullptr, nullptr);
+			sqlite3_finalize(stmt);
+			throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
+		}
+	}
+	sqlite3_finalize(stmt);
+	return true;
+}
+
+void pack::clear() {
+	sqlite3_stmt* stmt;
+	if (const auto rc = sqlite3_prepare_v3(db, "delete from pack_files", -1, 0, &stmt, nullptr); rc != SQLITE_OK) {
+		throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
+	}
+	while (true) {
+		const auto rc = sqlite3_step(stmt);
+		if (rc == SQLITE_BUSY)
+			if (sqlite3_get_autocommit(db)) {
+				sqlite3_reset(stmt);
+				continue;
+			} else {
+				sqlite3_exec(db, "rollback", nullptr, nullptr, nullptr);
+				sqlite3_reset(stmt);
+				continue;
+			}
+		else if (rc == SQLITE_DONE) break;
+		else {
+			if (!sqlite3_get_autocommit(db)) sqlite3_exec(db, "rollback", nullptr, nullptr, nullptr);
+			sqlite3_finalize(stmt);
+			throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
+		}
+	}
+	sqlite3_finalize(stmt);
+}
+
 void* pack::open_file(const std::string& file_name, const bool rw) {
 	blob_stream stream = open_file_stream(file_name, rw);
 	return nvgt_datastream_create(&stream, "", 1);
@@ -856,5 +918,7 @@ void RegisterScriptPack(asIScriptEngine* engine) {
 	engine->RegisterObjectMethod("sqlite_pack", "uint get_size() const property", asMETHOD(pack, size), asCALL_THISCALL);
 	engine->RegisterObjectMethod("sqlite_pack", "datastream@ open_file(const string& file_name, const bool rw)", asMETHODPR(pack, open_file, (const string &, const bool), void*), asCALL_THISCALL);
 	engine->RegisterObjectMethod("sqlite_pack", "void allocate_file(const string& file_name, const int64 size, const bool allow_replace = false)", asMETHODPR(pack, allocate_file, (const string&, const int64_t, const bool), void), asCALL_THISCALL);
+	engine->RegisterObjectMethod("sqlite_pack", "bool rename_file(const string& old, const string& new_)", asMETHOD(pack, rename_file), asCALL_THISCALL);
+	engine->RegisterObjectMethod("sqlite_pack", "void clear()", asMETHOD(pack, clear), asCALL_THISCALL);
 }
 
