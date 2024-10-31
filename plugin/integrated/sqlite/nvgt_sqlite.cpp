@@ -31,7 +31,7 @@ void init_sqlite() {
 	sqlite_started = true;
 }
 
-sqlite3statement::sqlite3statement(sqlite3DB* p, sqlite3_stmt* s) : parent(p), statement(s), ref_count(1) {}
+sqlite3statement::sqlite3statement(sqlite3_stmt* s) : statement(s), ref_count(1) {}
 void sqlite3statement::add_ref() {
 	asAtomicInc(ref_count);
 }
@@ -192,7 +192,7 @@ sqlite3statement* sqlite3DB::prepare(const std::string& statement, int* statemen
 	if (err != SQLITE_OK) return nullptr;
 	sqlite3statement* ret = NULL;
 	if (st)
-		ret = new sqlite3statement(this, st);
+		ret = new sqlite3statement(st);
 	if (tail && statement_tail)
 		*statement_tail = (tail - statement.c_str());
 	return ret;

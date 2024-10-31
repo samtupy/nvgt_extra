@@ -768,6 +768,14 @@ void* pack::open_file(const std::string& file_name, const bool rw) {
 	return nvgt_datastream_create(&stream, "", 1);
 }
 
+sqlite3statement* pack::prepare(const string& statement, const bool persistant) {
+	sqlite3_stmt* stmt;
+	if (const auto rc = sqlite3_prepare_v3(db, statement.data(), statement.size(), persistant ? SQLITE_PREPARE_PERSISTENT : 0, &stmt, nullptr); rc != SQLITE_OK) {
+		throw runtime_error(Poco::format("Parse error: %s", string(sqlite3_errmsg(db))));
+	}
+	return new sqlite3statement(stmt);
+}
+
 blob_stream_buf::blob_stream_buf(): Poco::BufferedBidirectionalStreamBuf(4096, ios::in) {
 }
 
@@ -920,5 +928,6 @@ void RegisterScriptPack(asIScriptEngine* engine) {
 	engine->RegisterObjectMethod("sqlite_pack", "void allocate_file(const string& file_name, const int64 size, const bool allow_replace = false)", asMETHODPR(pack, allocate_file, (const string&, const int64_t, const bool), void), asCALL_THISCALL);
 	engine->RegisterObjectMethod("sqlite_pack", "bool rename_file(const string& old, const string& new_)", asMETHOD(pack, rename_file), asCALL_THISCALL);
 	engine->RegisterObjectMethod("sqlite_pack", "void clear()", asMETHOD(pack, clear), asCALL_THISCALL);
+	engine->RegisterObjectMethod("sqlite_pack", "sqlite3statement@ prepare(const string& statement, const bool persistant = false)", asMETHOD(pack, prepare), asCALL_THISCALL);
 }
 

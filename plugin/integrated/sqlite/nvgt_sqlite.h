@@ -10,6 +10,7 @@
  * 3. This notice may not be removed or altered from any source distribution.
 */
 
+#pragma once
 #include <string>
 #include "../../src/nvgt_plugin.h"
 #include <scriptarray.h>
@@ -20,9 +21,8 @@ class sqlite3DB;
 class sqlite3statement {
 	int ref_count;
 public:
-	sqlite3DB* parent;
 	sqlite3_stmt* statement;
-	sqlite3statement(sqlite3DB* p, sqlite3_stmt* s);
+	sqlite3statement(sqlite3_stmt* s);
 	void add_ref();
 	void release();
 	int step();

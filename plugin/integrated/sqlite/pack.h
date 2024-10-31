@@ -22,6 +22,7 @@
 #include <string_view>
 #include <iostream>
 #include <ios>
+#include "nvgt_sqlite.h"
 
 class blob_stream;
 
@@ -55,6 +56,7 @@ public:
 	void allocate_file(const std::string& file_name, const std::int64_t size, const bool allow_replace = false);
 	bool rename_file(const std::string& old, const std::string& new_);
 	void clear();
+	sqlite3statement* prepare(const std::string& statement, const bool persistant = false);
 };
 
 class blob_stream_buf: public Poco::BufferedBidirectionalStreamBuf {
