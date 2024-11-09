@@ -12,8 +12,7 @@ else:
 	avxenv.Append(CCFLAGS=["-mavx", "-maes"])
 sqlite_addons = avxenv.SharedObject(["#extra/plugin/dep/sqlite3/dbdump.c", "#extra/plugin/dep/sqlite3/eval.c", "#extra/plugin/dep/sqlite3/monocypher.c", "#extra/plugin/dep/sqlite3/monocypher-ed25519.c", "#extra/plugin/dep/sqlite3/xchacha_cipher.c", "#extra/plugin/dep/sqlite3/spellfix.c", "pack.cpp", "#extra/plugin/dep/sqlite3/rng_get_bytes.c", "#extra/plugin/dep/sqlite3/sqlite3.c"], CPPDEFINES = defines)
 if ARGUMENTS.get("no_shared_plugins", "0") == "0":
-	avxenv.SharedLibrary("#release/lib/nvgt_sqlite", ["nvgt_sqlite.cpp", scriptarray, sqlite_addons], LIBS = ["PocoFoundationMT", "PocoDataSQLiteMT"] if avxenv["PLATFORM"] == "win32" else ["PocoFoundation", "PocoDataSQLite"])
+	avxenv.SharedLibrary("#release/lib/nvgt_sqlite", ["nvgt_sqlite.cpp", scriptarray, sqlite_addons], LIBS = ["PocoFoundation"] if avxenv["PLATFORM"] != "win32" else [])
 static = avxenv.Object("nvgt_sqlite_static", "nvgt_sqlite.cpp", CPPDEFINES = [("NVGT_PLUGIN_STATIC", "nvgt_sqlite")])
 static = avxenv.StaticLibrary("#build/lib/nvgt_sqlite", [static, sqlite_addons])
-static = [static, "PocoDataSQLiteMT" if avxenv["PLATFORM"] == "win32" else "PocoDataSQLite"]
 Return("static")

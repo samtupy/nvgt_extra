@@ -8,7 +8,7 @@ winlibs = ""
 if env["PLATFORM"] == "win32":
 	winlibs = "kernel32 user32 crypt32 advapi32 iphlpapi netapi32 uuid wldap32 ws2_32 normaliz"
 if ARGUMENTS.get("no_shared_plugins", "0") == "0":
-	env.SharedLibrary("#release/lib/nvgt_curl", ["internet.cpp", scriptarray], LIBS = Split(winlibs) + ["libcurl", "PocoFoundationMT" if env["PLATFORM"] == "win32" else "PocoFoundation"], CPPDEFINES = ["CURL_STATICLIB"])
+	env.SharedLibrary("#release/lib/nvgt_curl", ["internet.cpp", scriptarray], LIBS = Split(winlibs) + ["libcurl"] + (["PocoFoundation"] if env["PLATFORM"] != "win32" else ["PocoFoundationMT" if not "windev_debug" in env else "PocoFoundationMTD"]), CPPDEFINES = ["CURL_STATICLIB"])
 static = env.Object("internet_static", "internet.cpp", CPPDEFINES = [("NVGT_PLUGIN_STATIC", "nvgt_curl"), "CURL_STATICLIB"])
 static = env.StaticLibrary("#build/lib/nvgt_curl", [static], LIBS = ["libcurl"])
 static = [static, "libcurl"]
