@@ -21,7 +21,6 @@
 #include <fstream>
 #include <filesystem>
 #include <mutex>
-#include "xchacha_cipher.h"
 #include <Poco/StreamUtil.h>
 #include <algorithm>
 #include <Poco/RegularExpression.h>
@@ -63,9 +62,6 @@ pack::pack() {
 	db = nullptr;
 	call_once(SQLITE3MC_INITIALIZER, []() {
 		sqlite3_initialize();
-		if (const auto rc = nvgt_sqlite_register_cipher(); rc != SQLITE_OK) {
-			throw runtime_error(Poco::format("Internal error: can't register cipher: %s", string(sqlite3_errstr(rc))));
-		}
 		CScriptArray::SetMemoryFunctions(std::malloc, std::free);
 	});
 }
