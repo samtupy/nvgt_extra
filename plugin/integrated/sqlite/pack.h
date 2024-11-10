@@ -17,12 +17,19 @@
 #include <unordered_map>
 #include <Poco/RefCountedObject.h>
 #include <scriptarray.h>
+#include <scriptdictionary.h>
 #include <vector>
 #include <Poco/BufferedBidirectionalStreamBuf.h>
 #include <string_view>
 #include <iostream>
 #include <ios>
 #include "nvgt_sqlite.h"
+
+enum class FindMode {
+	Like,
+	Glob,
+	Regexp
+};
 
 class blob_stream;
 
@@ -57,6 +64,8 @@ public:
 	bool rename_file(const std::string& old, const std::string& new_);
 	void clear();
 	sqlite3statement* prepare(const std::string& statement, const bool persistant = false);
+	CScriptArray* find(const std::string& what, const FindMode mode = FindMode::Like);
+	CScriptArray* exec(const std::string& sql);
 };
 
 class blob_stream_buf: public Poco::BufferedBidirectionalStreamBuf {

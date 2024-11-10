@@ -24,10 +24,40 @@
 #include "xchacha_cipher.h"
 #include <Poco/StreamUtil.h>
 #include <algorithm>
+#include <Poco/RegularExpression.h>
+#include <type_traits>
 
 using namespace std;
 
 static once_flag SQLITE3MC_INITIALIZER;
+
+void regexp (sqlite3_context* ctx, int argc, sqlite3_value** argv) {
+	if (argc != 2) {
+		sqlite3_result_error(ctx, "Expected 2 arguments", -1);
+		return;
+	}
+	if (sqlite3_value_type(argv[0]) != SQLITE_TEXT) {
+		sqlite3_result_error(ctx, "Regexp must be a string", -1);
+		return;
+	}
+	if (sqlite3_value_type(argv[1]) != SQLITE_TEXT) {
+		sqlite3_result_error(ctx, "String to match must be a string", -1);
+		return;
+	}
+	try {
+		const string expr(reinterpret_cast<const char*>(sqlite3_value_text(argv[0])));
+		const string string_to_match(reinterpret_cast<const char*>(sqlite3_value_text(argv[1])));
+		Poco::RegularExpression regexp(expr, Poco::RegularExpression::RE_EXTRA | Poco::RegularExpression::RE_NOTEMPTY | Poco::RegularExpression::RE_UTF8 | Poco::RegularExpression::RE_NO_UTF8_CHECK | Poco::RegularExpression::RE_NEWLINE_ANY);
+		Poco::RegularExpression::Match match;
+		if (match.offset == string::npos && match.length == 0) {
+			sqlite3_result_int(ctx, 0);
+			return;
+		}
+		sqlite3_result_int(ctx, 1);
+	} catch (exception& ex) {
+		sqlite3_result_error(ctx, ex.what(), -1);
+	}
+}
 
 pack::pack() {
 	db = nullptr;
@@ -57,6 +87,9 @@ bool pack::open(const string& filename, int mode, const string& key) {
 	}
 	if (const auto rc = sqlite3_db_config(db, SQLITE_DBCONFIG_DEFENSIVE, 1, NULL); rc != SQLITE_OK) {
 		throw runtime_error(Poco::format("Internal error: culd not set defensive mode: %s", string(sqlite3_errmsg(db))));
+	}
+	if (const auto rc = sqlite3_create_function_v2(db, "regexp", 2, SQLITE_UTF8 | SQLITE_DETERMINISTIC | SQLITE_DIRECTONLY, nullptr, &regexp, nullptr, nullptr, nullptr); rc != SQLITE_OK) {
+		throw runtime_error(Poco::format("Internal error: Could not register regexp function: %s", string(sqlite3_errmsg(db))));
 	}
 	return true;
 }
@@ -757,6 +790,93 @@ void pack::clear() {
 	sqlite3_finalize(stmt);
 }
 
+CScriptArray* pack::find(const std::string& what, const FindMode mode) {
+	asIScriptContext* ctx = asGetActiveContext();
+	asIScriptEngine* engine = ctx->GetEngine();
+	asITypeInfo* arrayType = engine->GetTypeInfoByDecl("array<string>");
+	CScriptArray* array = CScriptArray::Create(arrayType);
+	sqlite3_stmt* stmt;
+	switch (mode) {
+		case FindMode::Like: {
+			if (const auto rc = sqlite3_prepare_v3(db, "select file_name from pack_files where file_name like ?", -1, 0, &stmt, nullptr); rc != SQLITE_OK) {
+				throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
+			}
+		} break;
+		case FindMode::Glob: {
+			if (const auto rc = sqlite3_prepare_v3(db, "select file_name from pack_files where ? glob file_name", -1, 0, &stmt, nullptr); rc != SQLITE_OK) {
+				throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
+			}
+		} break;
+		case FindMode::Regexp: {
+			if (const auto rc = sqlite3_prepare_v3(db, "select file_name from pack_files where ? regexp file_name", -1, 0, &stmt, nullptr); rc != SQLITE_OK) {
+				throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
+			}
+		} break;
+	}
+	if (const auto rc = sqlite3_bind_text64(stmt, 1, what.data(), what.size(), SQLITE_STATIC, SQLITE_UTF8); rc != SQLITE_OK) {
+		sqlite3_finalize(stmt);
+		throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
+	}
+	while (true) {
+		const auto rc = sqlite3_step(stmt);
+		if (rc == SQLITE_BUSY)
+			if (sqlite3_get_autocommit(db)) {
+				sqlite3_reset(stmt);
+				continue;
+			} else {
+				sqlite3_exec(db, "rollback", nullptr, nullptr, nullptr);
+				sqlite3_reset(stmt);
+				continue;
+			}
+		else if (rc == SQLITE_DONE) break;
+		else if (rc == SQLITE_ROW) {
+			std::string res;
+			res.resize(sqlite3_column_bytes(stmt, 0));
+			for (auto i = 0; i < res.size(); ++i) {
+				res[i] = static_cast<char>(sqlite3_column_text(stmt, 0)[i]);
+			}
+			array->InsertLast(&res);
+} else {
+			if (!sqlite3_get_autocommit(db)) sqlite3_exec(db, "rollback", nullptr, nullptr, nullptr);
+			sqlite3_finalize(stmt);
+			throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
+		}
+	}
+	sqlite3_finalize(stmt);
+	return array;
+}
+
+CScriptArray* pack::exec(const std::string& sql) {
+	asIScriptContext* ctx = asGetActiveContext();
+	asIScriptEngine* engine = ctx->GetEngine();
+	asITypeInfo* arrayType = engine->GetTypeInfoByDecl("array<string>");
+	CScriptArray* array = CScriptArray::Create(arrayType);
+	char* errmsg;
+	if (const auto rc = sqlite3_exec(db, sql.data(), [](void* arr, int column_count, char** column_data, char** columns) -> int {
+		CScriptArray* array = (CScriptArray*)arr;
+		asIScriptContext* ctx = asGetActiveContext();
+		asIScriptEngine* engine = ctx->GetEngine();
+		asITypeInfo* string_type = engine->GetTypeInfoByDecl("string");
+		CScriptDictionary* d = CScriptDictionary::Create(engine);
+		for (auto i = 0; i < column_count; ++i) {
+			if (column_data[i]) {
+				d->Set(columns[i], column_data[i], string_type->GetTypeId());
+			} else {
+				std::string null_string = "NULL";
+				d->Set(columns[i], &null_string, string_type->GetTypeId());
+			}
+		}
+		array->InsertLast(&d);
+		return 0;
+	}, array, &errmsg); rc != SQLITE_OK) {
+		if (errmsg)
+			throw runtime_error(errmsg);
+		else
+			throw runtime_error("Unknown error");
+	}
+	return array;
+}
+
 void* pack::open_file(const std::string& file_name, const bool rw) {
 	blob_stream stream = open_file_stream(file_name, rw);
 	return nvgt_datastream_create(&stream, "", 1);
@@ -898,6 +1018,10 @@ void RegisterScriptPack(asIScriptEngine* engine) {
 	engine->RegisterEnumValue("pack_open_mode", "SQLITE_PACK_OPEN_MODE_SHARED_CACHE", SQLITE_OPEN_SHAREDCACHE);
 	engine->RegisterEnumValue("pack_open_mode", "SQLITE_PACK_OPEN_MODE_PRIVATE_CACHE", SQLITE_OPEN_PRIVATECACHE);
 	engine->RegisterEnumValue("pack_open_mode", "SQLITE_PACK_OPEN_MODE_NO_FOLLOW", SQLITE_OPEN_NOFOLLOW);
+	engine->RegisterEnum("sqlite_pack_find_mode");
+	engine->RegisterEnumValue("sqlite_pack_find_mode", "SQLITE_PACK_FIND_MODE_LIKE", static_cast<underlying_type_t<FindMode>>(FindMode::Like));
+	engine->RegisterEnumValue("sqlite_pack_find_mode", "SQLITE_PACK_FIND_MODE_GLOB", static_cast<underlying_type_t<FindMode>>(FindMode::Glob));
+	engine->RegisterEnumValue("sqlite_pack_find_mode", "SQLITE_PACK_FIND_MODE_REGEXP", static_cast<underlying_type_t<FindMode>>(FindMode::Regexp));
 	engine->RegisterObjectType("sqlite_pack", 0, asOBJ_REF);
 	engine->RegisterObjectBehaviour("sqlite_pack", asBEHAVE_FACTORY, "sqlite_pack @p()", asFUNCTION(ScriptPack_Factory), asCALL_CDECL);
 	engine->RegisterObjectBehaviour("sqlite_pack", asBEHAVE_ADDREF, "void f()", asMETHOD(pack, duplicate), asCALL_THISCALL);
@@ -921,5 +1045,7 @@ void RegisterScriptPack(asIScriptEngine* engine) {
 	engine->RegisterObjectMethod("sqlite_pack", "bool rename_file(const string& old, const string& new_)", asMETHOD(pack, rename_file), asCALL_THISCALL);
 	engine->RegisterObjectMethod("sqlite_pack", "void clear()", asMETHOD(pack, clear), asCALL_THISCALL);
 	engine->RegisterObjectMethod("sqlite_pack", "sqlite3statement@ prepare(const string& statement, const bool persistant = false)", asMETHOD(pack, prepare), asCALL_THISCALL);
+	engine->RegisterObjectMethod("sqlite_pack", "string[]@ find(const string& what, const sqlite_pack_find_mode = SQLITE_PACK_FIND_MODE_LIKE)", asMETHOD(pack, find), asCALL_THISCALL);
+	engine->RegisterObjectMethod("sqlite_pack", "dictionary@[]@ exec(const string& sql)", asMETHOD(pack, exec), asCALL_THISCALL);
 }
 
