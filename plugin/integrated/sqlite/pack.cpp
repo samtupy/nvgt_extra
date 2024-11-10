@@ -33,11 +33,9 @@ pack::pack() {
 	db = nullptr;
 	call_once(SQLITE3MC_INITIALIZER, []() {
 		sqlite3_initialize();
-		#ifdef SQLITE3MC_H_
 		if (const auto rc = nvgt_sqlite_register_cipher(); rc != SQLITE_OK) {
 			throw runtime_error(Poco::format("Internal error: can't register cipher: %s", string(sqlite3_errstr(rc))));
 		}
-		#endif
 		CScriptArray::SetMemoryFunctions(std::malloc, std::free);
 	});
 }
@@ -46,13 +44,11 @@ bool pack::open(const string& filename, int mode, const string& key) {
 	if (const auto rc = sqlite3_open_v2(filename.data(), &db, mode | SQLITE_OPEN_EXRESCODE, nullptr); rc != SQLITE_OK) {
 		return false;
 	}
-	#ifdef SQLITE3MC_H_
 	if (!key.empty()) {
 		if (const auto rc = sqlite3_key_v2(db, "main", key.data(), key.size()); rc != SQLITE_OK) {
 			throw runtime_error(Poco::format("Internal error: Could not set key: %s", string(sqlite3_errmsg(db))));
 		}
 	}
-	#endif
 	if (const auto rc = sqlite3_exec(db, "pragma journal_mode=wal;", nullptr, nullptr, nullptr); rc != SQLITE_OK) {
 		throw runtime_error(Poco::format("Internal error: could not set journaling mode: %s", string(sqlite3_errmsg(db))));
 	}
@@ -72,14 +68,12 @@ pack::~pack() {
 	}
 }
 
-#ifdef SQLITE3MC_H_
 bool pack::rekey(const string& key) {
 	if (const auto rc = sqlite3_rekey_v2(db, "main", key.data(), key.size()); rc != SQLITE_OK) {
 		return false;
 	}
 	return true;
 }
-#endif
 
 bool pack::close() {
 	if (const auto rc = sqlite3_close(db); rc != SQLITE_OK) {
@@ -909,9 +903,7 @@ void RegisterScriptPack(asIScriptEngine* engine) {
 	engine->RegisterObjectBehaviour("sqlite_pack", asBEHAVE_ADDREF, "void f()", asMETHOD(pack, duplicate), asCALL_THISCALL);
 	engine->RegisterObjectBehaviour("sqlite_pack", asBEHAVE_RELEASE, "void f()", asMETHOD(pack, release), asCALL_THISCALL);
 	engine->RegisterObjectMethod("sqlite_pack", "bool open(const string &in filename, const int mode = SQLITE_PACK_OPEN_MODE_READ_ONLY, const string& key = \"\")", asMETHOD(pack, open), asCALL_THISCALL);
-	#ifdef SQLITE3MC_H_
 	engine->RegisterObjectMethod("sqlite_pack", "bool rekey(const string& key)", asMETHOD(pack, rekey), asCALL_THISCALL);
-	#endif
 	engine->RegisterObjectMethod("sqlite_pack", "bool close()", asMETHOD(pack, close), asCALL_THISCALL);
 	engine->RegisterObjectMethod("sqlite_pack", "bool add_file(const string &in disc_filename, const string& in pack_filename, bool allow_replace = false)", asMETHOD(pack, add_file), asCALL_THISCALL);
 	engine->RegisterObjectMethod("sqlite_pack", "bool add_directory(const string &in dir, const bool allow_replace = false)", asMETHOD(pack, add_directory), asCALL_THISCALL);
