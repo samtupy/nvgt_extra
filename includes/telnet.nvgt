@@ -1,0 +1,263 @@
+/*
+This class is a telnet handler for applications which wish to use the telnet protocol (RFC 854) over any kind of underlying protocol (TCP, UDP, QUIC, ...).
+
+The handler is callback-based. When initialized host software MUST set all callbacks. An error SHALL be raised if any callbacks are unset.
+
+Callbacks SHALL take as little time as possible to execute. Asynchronous execution is currently NOT supported and callbacks SHALL block until completed.
+
+The command callback SHALL be called when a telnet command (i.e., Erase Line, Go Ahead) is received from a connection. The callback is responsible for responding to each command on it's own. The callback SHALL be called once per command.
+
+The data callback SHALL be called when ordinary data is received. For the purposes of this paragraph, the term "ordinary data" means data which is neither a command, negotiation, or subnegotiation, as defined by RFC 854. The content of this data is explicitly unspecified.
+
+The negotiation callback SHALL be called when the remote peer wishes or does not wish the client to utilize an option, extension, etc. The callback MUST respond in one of the following ways:
+
+1. If a WILL option request is received, host software MUST reply with a DO option if it supports the option, or a DONT option otherwise. Host software MAY refuse to enable an option, but MUST NOT refuse to disable an option.
+2. If the remote endpoint sends a DO option request, host software MUST respond with a WILL option if it wishes to enable the option, or WONT if it wishes to not enable the option. As per the prior paragraph, host software MUST NOT refuse to disable an option.
+3. Both endpoints SHALL only request a change in option status. Neither endpoint SHALL send an option change request to announce what mode it is in.
+4. If an endpoint receives a mode change request to enter a mode it is already in, host software MUST NOT send an acknowledgement for that request.
+5. If host software sends an option command to the remote peer, or vice-versa, whether as a request or acknowledgement, and that option request has an effect on incoming data processing from the sender to the receiver, the command MUST be inserted in the data stream at the point where it is desired that it take effect.
+
+Note: this client uses arrays of `uint8` for data handling. Strings are not supported. Host software, if it uses strings, MUST translate between both types.
+
+The telnet handler class is not inheritable.
+*/
+
+enum telnet_command {
+	TELNET_COMMAND_SE = 240,
+	TELNET_COMMAND_NOP,
+	TELNET_COMMAND_DM,
+	TELNET_COMMAND_BRK,
+	TELNET_COMMAND_IP,
+	TELNET_COMMAND_AO,
+	TELNET_COMMAND_AYT,
+	TELNET_COMMAND_EC,
+	TELNET_COMMAND_EL,
+	TELNET_COMMAND_GA,
+	TELNET_COMMAND_SB,
+	TELNET_COMMAND_WILL,
+	TELNET_COMMAND_WONT,
+	TELNET_COMMAND_DO,
+	TELNET_COMMAND_DONT,
+	TELNET_COMMAND_IAC
+}
+
+shared final class telnet_negotiation {
+	uint8 request;
+	uint8 option;
+}
+
+funcdef void command_callback(const uint8);
+funcdef void data_callback(const uint8[]@);
+funcdef void negotiation_callback(const telnet_negotiation&);
+funcdef void subnegotiation_callback(const uint8[]@);
+funcdef void send_callback(const uint8[]@);
+
+shared final class TelnetHandler {
+	private enum telnet_state {
+		TELNET_STATE_START,
+		TELNET_STATE_IAC,
+		TELNET_STATE_COMMAND,
+		TELNET_STATE_NEGOTIATION_COMMAND,
+		TELNET_STATE_SUBNEGOTIATION_INIT,
+		TELNET_STATE_SUBNEGOTIATION_IAC_OR_DATA
+	}
+
+	private telnet_state state = TELNET_STATE_START;
+	private negotiation_callback@ negotiation_cb;
+	private subnegotiation_callback@ subnegotiation_cb;
+	private data_callback@ data_cb;
+	private send_callback@ send_cb;
+	private command_callback@ command_cb;
+	explicit TelnetHandler(const command_callback@ command_cb, const negotiation_callback@ negotiation_cb, const subnegotiation_callback@ subnegotiation_cb, const data_callback@ data_cb, const send_callback@ send_cb) {
+		assert(command_cb != null, "Telnet: Command callback is required");
+		assert(negotiation_cb != null, "Telnet: negotiation callback is required");
+		assert(subnegotiation_cb != null, "Telnet: Subnegotiation callback is required");
+		assert(data_cb != null, "Telnet: Data callback is required");
+		assert(send_cb != null, "Telnet: Send callback is required");
+		this.command_cb = command_cb;
+		this.subnegotiation_cb = subnegotiation_cb;
+		this.negotiation_cb = negotiation_cb;
+		this.data_cb = data_cb;
+		this.send_cb = send_cb;
+		this.state = TELNET_STATE_START;
+	}
+
+	public void handle_incoming_data(const uint8[]@ data) {
+		if (data.length == 0) return;
+		uint8[] commands;
+		uint8[][] subnegotiations;
+		telnet_negotiation[] negotiations;
+		uint8[] ordinary_data;
+		uint64 index = 0;
+		uint8[] tmp;
+		while (index < data.length) {
+			const auto byte = data[index];
+			switch (state) {
+				case TELNET_STATE_START: {
+					if (byte == TELNET_COMMAND_IAC) {
+						state = TELNET_STATE_IAC;
+						index++;
+						continue;
+					}
+					ordinary_data.insert_last(byte);
+					index++;
+					continue;
+				} break;
+				case TELNET_STATE_IAC:
+					switch (byte) {
+						case TELNET_COMMAND_WILL:
+						case TELNET_COMMAND_WONT:
+						case TELNET_COMMAND_DO:
+						case TELNET_COMMAND_DONT: {
+							state = TELNET_STATE_NEGOTIATION_COMMAND;
+							continue;
+						} break;
+						case TELNET_COMMAND_SB: {
+							state = TELNET_STATE_SUBNEGOTIATION_INIT;
+							index++;
+							continue;
+						} break;
+						case TELNET_COMMAND_IAC: {
+							ordinary_data.insert_last(TELNET_COMMAND_IAC);
+							index++;
+							state = TELNET_STATE_START;
+							continue;
+						} break;
+						default: {
+							state = TELNET_STATE_COMMAND;
+							continue;
+						} break;
+					}
+				break;
+				case TELNET_STATE_COMMAND: {
+					commands.insert_last(byte);
+					index++;
+					state = TELNET_STATE_START;
+					continue;
+				} break;
+				case TELNET_STATE_NEGOTIATION_COMMAND: {
+					assert (byte == TELNET_COMMAND_DO or byte == TELNET_COMMAND_DONT or byte == TELNET_COMMAND_WILL or byte == TELNET_COMMAND_WONT, "Expected byte to be will/wont/do/dont");
+					const auto option = byte[index + 1];
+					telnet_negotiation negotiation;
+					negotiation.request = byte;
+					negotiation.option = option;
+					negotiations.insert_last(negotiation);
+					index += 2;
+					state = TELNET_STATE_START;
+					continue;
+				} break;
+				case TELNET_STATE_SUBNEGOTIATION_INIT:
+					if (byte == TELNET_COMMAND_IAC) {
+						index++;
+						state = TELNET_STATE_SUBNEGOTIATION_IAC_OR_DATA;
+						continue;
+					} else {
+						tmp.insert_last(byte);
+						index++;
+						continue;
+					}
+				break;
+				case TELNET_STATE_SUBNEGOTIATION_IAC_OR_DATA: {
+					if (byte == TELNET_COMMAND_SE) {
+						subnegotiations.insert_last(tmp);
+						tmp.clear();
+						index++;
+						state = TELNET_STATE_START;
+						continue;
+					} else if (byte == TELNET_COMMAND_IAC) {
+						tmp.insert_last(TELNET_COMMAND_IAC);
+						index ++;
+						continue;
+					} else {
+						tmp.insert_last(byte);
+						state = TELNET_STATE_SUBNEGOTIATION_INIT;
+						index++;
+						continue;
+					}
+				} break;
+			}
+		}
+
+		for (auto i = 0; i < commands.length; ++i)
+			command_cb(commands[i]);
+
+		for (auto i = 0; i < negotiations.length; ++i)
+			negotiation_cb(negotiations[i]);
+
+		for (auto i = 0; i < subnegotiations.length; ++i)
+			subnegotiation_cb(subnegotiations[i]);
+
+		if (ordinary_data.length == 0) return;
+		data_cb(ordinary_data);
+	}
+
+	publicc void send_nop() {
+		return send_cb({TELNET_COMMAND_IAC, TELNET_COMMAND_NOP});
+}
+
+	publicc void send_dm() {
+		return send_cb({TELNET_COMMAND_IAC, TELNET_COMMAND_DM});
+}
+
+	publicc void send_break() {
+		return send_cb({TELNET_COMMAND_IAC, TELNET_COMMAND_BRK});
+}
+
+	publicc void send_ip() {
+		return send_cb({TELNET_COMMAND_IAC, TELNET_COMMAND_IP});
+}
+
+	publicc void send_ao() {
+		return send_cb({TELNET_COMMAND_IAC, TELNET_COMMAND_AO});
+}
+
+	publicc void send_ayt() {
+		return send_cb({TELNET_COMMAND_IAC, TELNET_COMMAND_AYT});
+}
+
+	publicc void send_ec() {
+		return send_cb({TELNET_COMMAND_IAC, TELNET_COMMAND_EC});
+}
+
+	publicc void send_el() {
+		return send_cb({TELNET_COMMAND_IAC, TELNET_COMMAND_EL});
+}
+
+	publicc void send_ga() {
+		return send_cb({TELNET_COMMAND_IAC, TELNET_COMMAND_GA});
+}
+
+	public void send_will(const uint8 option) {
+		return send_cb({TELNET_COMMAND_IAC, TELNET_COMMAND_WILL, option});
+	}
+
+	public void send_wont(const uint8 option) {
+		return send_cb({TELNET_COMMAND_IAC, TELNET_COMMAND_WONT, option});
+	}
+
+	public void send_do(const uint8 option) {
+		return send_cb({TELNET_COMMAND_IAC, TELNET_COMMAND_DO, option});
+	}
+
+	public void send_dont(const uint8 option) {
+		return send_cb({TELNET_COMMAND_IAC, TELNET_COMMAND_DONT, option});
+	}
+
+	public void send_iac() {
+		return send_cb({TELNET_COMMAND_IAC, TELNET_COMMAND_IAC});
+	}
+
+	public void send_subnegotiation_data(const uint8[]@ data) {
+		// To do: figure out how to optimize this
+		uint8[] payload;
+		payload.reserve(data.length + 4);
+		payload.insert_last(TELNET_COMMAND_IAC);
+		payload.insert_last(TELNET_COMMAND_SB);
+		for (auto i = 0; i < data.length; ++i)
+			payload.insert_last(data[i]);
+
+		payload.insert_last(TELNET_COMMAND_IAC);
+		payload.insert_last(TELNET_COMMAND_SE);
+		return send_cb(@payload);
+	}
+}

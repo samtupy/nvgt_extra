@@ -1,0 +1,9 @@
+#pragma plugin nvgt_sqlite
+
+void main() {
+sqlite_pack p;
+p.open("data.pack", SQLITE_PACK_OPEN_MODE_READ_WRITE | SQLITE_PACK_OPEN_MODE_CREATE, "your_key_here");
+p.add_file("readme.md", "readme.md");
+p.close();
+println("Data added");
+}
