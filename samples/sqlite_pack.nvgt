@@ -6,4 +6,12 @@ p.open("data.pack", SQLITE_PACK_OPEN_MODE_READ_WRITE | SQLITE_PACK_OPEN_MODE_CRE
 p.add_file("readme.md", "readme.md");
 p.close();
 println("Data added");
+p.open("data.pack", SQLITE_PACK_OPEN_MODE_READ_ONLY, "your_key_here");
+auto@ stream = p.open_file("readme.md", false);
+string text;
+text.resize(10000);
+stream >> text;
+stream.close();
+p.close();
+println("Read text: %0".format(text));
 }
