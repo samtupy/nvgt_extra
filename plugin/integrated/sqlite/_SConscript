@@ -7,10 +7,10 @@ defines = ["SQLITE_CORE", "SQLITE_ENABLE_CARRAY=1", "SQLITE_ENABLE_CSV=1", "SQLI
 avxenv.Append(CPPPATH=["#extra/plugin/dep/sqlite3"])
 if avxenv["PLATFORM"] == "win32":
 	avxenv.Append(CCFLAGS=["/arch:AVX"])
-elif avxenv["PLATFORM"] == "darwin":
-	avxenv.Append(CCFLAGS=["-mneon"])
 else:
 	avxenv.Append(CCFLAGS=["-mavx", "-maes"])
+if avxenv["PLATFORM"] == "darwin":
+	avxenv.Append(FRAMEWORKS=["Security", "Foundation"])
 sqlite_addons = avxenv.SharedObject(["#extra/plugin/dep/sqlite3/dbdump.c", "#extra/plugin/dep/sqlite3/eval.c", "#extra/plugin/dep/sqlite3/spellfix.c", "pack.cpp", "#extra/plugin/dep/sqlite3/sqlite3.c"], CPPDEFINES = defines)
 if ARGUMENTS.get("no_shared_plugins", "0") == "0":
 	avxenv.SharedLibrary("#release/lib/nvgt_sqlite", ["nvgt_sqlite.cpp", scriptarray, scriptdictionary, sqlite_addons], LIBS = ["PocoFoundation"] if avxenv["PLATFORM"] != "win32" else [])
