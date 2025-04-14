@@ -878,9 +878,9 @@ void* pack::open_file(const std::string& file_name, const bool rw) {
 	return nvgt_datastream_create(stream, "", 1);
 }
 
-std::istream* pack_file::get_file(const std::string& filename) const override {
+std::istream* pack::get_file(const std::string& filename) const {
 	try {
-		blob_stream* stream = new blob_stream(open_file_stream(file_name, false));
+		blob_stream* stream = new blob_stream(const_cast<pack*>(this)->open_file_stream(filename, false));
 		if (!stream) return nullptr;
 		return stream;
 	} catch (std::exception&) {
@@ -1052,5 +1052,7 @@ void RegisterScriptPack(asIScriptEngine* engine) {
 	engine->RegisterObjectMethod("sqlite_pack", "sqlite3statement@ prepare(const string& statement, const bool persistant = false)", asMETHOD(pack, prepare), asCALL_THISCALL);
 	engine->RegisterObjectMethod("sqlite_pack", "string[]@ find(const string& what, const sqlite_pack_find_mode mode = SQLITE_PACK_FIND_MODE_LIKE)", asMETHOD(pack, find), asCALL_THISCALL);
 	engine->RegisterObjectMethod("sqlite_pack", "dictionary@[]@ exec(const string& sql)", asMETHOD(pack, exec), asCALL_THISCALL);
+	engine->RegisterObjectMethod("sqlite_pack", "pack_interface@ opImplCast()", asFUNCTION((pack_interface::op_cast<pack, pack_interface>)), asCALL_CDECL_OBJFIRST);
+	engine->RegisterObjectMethod("sqlite_pack", "sqlite_pack@ opCast()", asFUNCTION((pack_interface::op_cast<pack_interface, pack>)), asCALL_CDECL_OBJFIRST);
 }
 

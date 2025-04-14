@@ -33,7 +33,7 @@ enum class FindMode {
 
 class blob_stream;
 
-class pack : public Poco::RefCountedObject, public pack_interface {
+class pack : public pack_interface {
 private:
 	sqlite3* db;
 public:
