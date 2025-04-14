@@ -33,7 +33,7 @@ enum class FindMode {
 
 class blob_stream;
 
-class pack : public Poco::RefCountedObject {
+class pack : public Poco::RefCountedObject, public pack_interface {
 private:
 	sqlite3* db;
 public:
@@ -66,6 +66,7 @@ public:
 	sqlite3statement* prepare(const std::string& statement, const bool persistant = false);
 	CScriptArray* find(const std::string& what, const FindMode mode = FindMode::Like);
 	CScriptArray* exec(const std::string& sql);
+	std::istream* get_file(const std::string& filename) const override;
 };
 
 class blob_stream_buf: public Poco::BufferedBidirectionalStreamBuf {

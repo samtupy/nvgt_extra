@@ -878,6 +878,11 @@ void* pack::open_file(const std::string& file_name, const bool rw) {
 	return nvgt_datastream_create(stream, "", 1);
 }
 
+std::istream* pack_file::get_file(const std::string& filename) const override {
+	blob_stream* stream = new blob_stream(open_file_stream(file_name, false));
+	return stream;
+}
+
 sqlite3statement* pack::prepare(const string& statement, const bool persistant) {
 	sqlite3_stmt* stmt;
 	if (const auto rc = sqlite3_prepare_v3(db, statement.data(), statement.size(), persistant ? SQLITE_PREPARE_PERSISTENT : 0, &stmt, nullptr); rc != SQLITE_OK) {
