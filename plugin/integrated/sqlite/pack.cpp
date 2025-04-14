@@ -879,8 +879,14 @@ void* pack::open_file(const std::string& file_name, const bool rw) {
 }
 
 std::istream* pack_file::get_file(const std::string& filename) const override {
-	blob_stream* stream = new blob_stream(open_file_stream(file_name, false));
-	return stream;
+	try {
+		blob_stream* stream = new blob_stream(open_file_stream(file_name, false));
+		if (!stream) return nullptr;
+		return stream;
+	} catch (std::exception&) {
+		return nullptr;
+	}
+	return nullptr;
 }
 
 sqlite3statement* pack::prepare(const string& statement, const bool persistant) {
