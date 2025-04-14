@@ -24,6 +24,7 @@
 #include <iostream>
 #include <ios>
 #include "nvgt_sqlite.h"
+#include <memory>
 
 enum class FindMode {
 	Like,
@@ -36,8 +37,11 @@ class blob_stream;
 class pack : public pack_interface {
 private:
 	sqlite3* db;
+	bool created_from_copy;
+	const pack* mutable_origin;
 public:
 	pack();
+	pack(const pack& other);
 	~pack();
 	bool open(const std::string& filename, int mode, const std::string& key);
 	bool rekey(const std::string& key);
@@ -67,6 +71,10 @@ public:
 	CScriptArray* find(const std::string& what, const FindMode mode = FindMode::Like);
 	CScriptArray* exec(const std::string& sql);
 	std::istream* get_file(const std::string& filename) const override;
+	sqlite3* get_db_ptr() const;
+	void set_db_ptr(sqlite3* ptr);
+	const pack_interface* make_immutable() const override;
+	const pack_interface* get_mutable() const override;
 };
 
 class blob_stream_buf: public Poco::BufferedBidirectionalStreamBuf {

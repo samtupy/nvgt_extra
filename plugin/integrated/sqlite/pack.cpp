@@ -60,10 +60,17 @@ void regexp (sqlite3_context* ctx, int argc, sqlite3_value** argv) {
 
 pack::pack() {
 	db = nullptr;
+	created_from_copy = false;
 	call_once(SQLITE3MC_INITIALIZER, []() {
 		sqlite3_initialize();
 		CScriptArray::SetMemoryFunctions(std::malloc, std::free);
 	});
+}
+
+pack::pack(const pack& other) : mutable_origin(&other) {
+	set_db_ptr(other.get_db_ptr());
+	other.duplicate();
+	created_from_copy = true;
 }
 
 bool pack::open(const string& filename, int mode, const string& key) {
@@ -91,7 +98,7 @@ bool pack::open(const string& filename, int mode, const string& key) {
 }
 
 pack::~pack() {
-	if (db) {
+	if (db && !created_from_copy) {
 		sqlite3_close(db);
 		db = nullptr;
 	}
@@ -730,11 +737,11 @@ bool pack::rename_file(const string& old, const string& new_) {
 	if (const auto rc = sqlite3_prepare_v3(db, "update pack_files set file_name = ? where file_name = ?", -1, 0, &stmt, nullptr); rc != SQLITE_OK) {
 		throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
 	}
-	if (const auto rc = sqlite3_bind_text64(stmt, 1, old.data(), old.size(), SQLITE_STATIC, SQLITE_UTF8); rc != SQLITE_OK) {
+	if (const auto rc = sqlite3_bind_text64(stmt, 1, new_.data(), new_.size(), SQLITE_STATIC, SQLITE_UTF8); rc != SQLITE_OK) {
 		sqlite3_finalize(stmt);
 		throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
 	}
-	if (const auto rc = sqlite3_bind_text64(stmt, 2, new_.data(), new_.size(), SQLITE_STATIC, SQLITE_UTF8); rc != SQLITE_OK) {
+	if (const auto rc = sqlite3_bind_text64(stmt, 2, old.data(), old.size(), SQLITE_STATIC, SQLITE_UTF8); rc != SQLITE_OK) {
 		sqlite3_finalize(stmt);
 		throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
 	}
@@ -889,12 +896,35 @@ std::istream* pack::get_file(const std::string& filename) const {
 	return nullptr;
 }
 
+sqlite3* pack::get_db_ptr() const {
+	if (!db) throw std::runtime_error("DB pointer is null!");
+	return db;
+}
+
+void pack::set_db_ptr(sqlite3* ptr) {
+	if (!ptr) throw std::runtime_error("db pointer is null!");
+	db = ptr;
+}
+
 sqlite3statement* pack::prepare(const string& statement, const bool persistant) {
 	sqlite3_stmt* stmt;
 	if (const auto rc = sqlite3_prepare_v3(db, statement.data(), statement.size(), persistant ? SQLITE_PREPARE_PERSISTENT : 0, &stmt, nullptr); rc != SQLITE_OK) {
 		throw runtime_error(Poco::format("Parse error: %s", string(sqlite3_errmsg(db))));
 	}
 	return new sqlite3statement(stmt);
+}
+
+const pack_interface* pack::make_immutable() const {
+	return new pack(*this);
+}
+
+const pack_interface* pack::get_mutable() const {
+	if (mutable_origin) {
+		mutable_origin->duplicate();
+		return mutable_origin;
+	}
+	this->duplicate();
+	return this;
 }
 
 blob_stream_buf::blob_stream_buf(): Poco::BufferedBidirectionalStreamBuf(4096, ios::in), read_pos(0), write_pos(0) {
@@ -914,66 +944,61 @@ void blob_stream_buf::open(sqlite3* s, const std::string_view& db, const std::st
 }
 
 blob_stream_buf::pos_type blob_stream_buf::seekoff(off_type off, ios_base::seekdir dir, ios_base::openmode which) {
-	if (off == 0 && dir == ios::cur)
-		if (which & ios::in) return read_pos - in_avail();
-		else if (which & ios::out) return write_pos - in_avail();
-		else return pos_type(-1);
+    if ((which & std::ios_base::out) != 0)
+        if (sync() == -1)
+            return pos_type(-1);
 
-    pos_type new_read_pos = read_pos;
-    pos_type new_write_pos = write_pos;
-    const pos_type blob_size = sqlite3_blob_bytes(blob);
-    if (which & ios::in) {
-        switch (dir) {
-            case ios::beg:
-                new_read_pos = off;
-                break;
-            case ios::cur:
-                new_read_pos += off;
-                break;
-            case ios::end:
-                new_read_pos = blob_size + off;
-                break;
-            default:
-                return pos_type(-1);
-        }
-        if (new_read_pos < 0 || new_read_pos > blob_size)
-            return pos_type(-1);
-        read_pos = new_read_pos;
+    off_type current_pos = 0;
+    if ((which & std::ios_base::in) != 0) {
+        const off_type buffered_count = egptr() - eback(); // total bytes in buffer
+        const off_type base_offset = read_pos - buffered_count;
+        const off_type used_in_buffer = gptr() - eback(); // how many we have consumed
+        current_pos = base_offset + used_in_buffer;
+    } else if ((which & std::ios_base::out) != 0) {
+        const off_type buffered_count = pptr() - pbase();
+        const off_type base_offset = write_pos - buffered_count;
+        const off_type used_in_buffer = pptr() - pbase();
+        current_pos = base_offset + used_in_buffer;
+    } else if (((which & std::ios_base::in)  != 0) && ((which & std::ios_base::out) != 0)) {
+    return pos_type(-1);
+    } else {
+    return pos_type(-1);
+}
+
+    off_type new_pos = 0;
+    const off_type blob_size = sqlite3_blob_bytes(blob);
+    switch (dir) {
+    case ios_base::beg:
+        new_pos = off;
+        break;
+    case ios_base::cur:
+        new_pos = current_pos + off;
+        break;
+    case ios_base::end:
+        new_pos = blob_size + off;
+        break;
+    default:
+        return pos_type(-1);
     }
-    if (which & ios::out) {
-        switch (dir) {
-            case ios::beg:
-                new_write_pos = off;
-                break;
-            case ios::cur:
-                new_write_pos += off;
-                break;
-            case ios::end:
-                new_write_pos = blob_size + off;
-                break;
-            default:
-                return pos_type(-1);
-        }
-        if (new_write_pos < 0 || new_write_pos > blob_size)
-            return pos_type(-1);
-        write_pos = new_write_pos;
+
+    if (new_pos < 0 || new_pos > blob_size)
+        return pos_type(-1);
+
+    // Discard old buffers
+    if ((which & std::ios_base::in) != 0) {
+        setg(nullptr, nullptr, nullptr); // invalidate
+        read_pos = new_pos;
     }
-    setg(nullptr, nullptr, nullptr);
-    underflow();
-    return (which & ios::in) ? read_pos : write_pos;
+    if ((which & std::ios_base::out) != 0) {
+        setp(nullptr, nullptr); // no valid write buffer now
+        write_pos = new_pos;
+    }
+
+    return pos_type(new_pos);
 }
 
 blob_stream_buf::pos_type blob_stream_buf::seekpos(pos_type pos, ios_base::openmode which) {
-    const pos_type blob_size = sqlite3_blob_bytes(blob);
-    if (pos < 0 || pos > blob_size)
-        return pos_type(-1);
-    if (which & ios::in)
-        read_pos = pos;
-    if (which & ios::out)
-        write_pos = pos;
-    setg(nullptr, nullptr, nullptr);
-    underflow();
-    return pos;
+	return seekoff(off_type(pos), std::ios_base::beg, which);
 }
 
 int blob_stream_buf::readFromDevice(char_type* buffer, std::streamsize length) {
