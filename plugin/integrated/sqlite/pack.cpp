@@ -914,6 +914,11 @@ void blob_stream_buf::open(sqlite3* s, const std::string_view& db, const std::st
 }
 
 blob_stream_buf::pos_type blob_stream_buf::seekoff(off_type off, ios_base::seekdir dir, ios_base::openmode which) {
+	if (off == 0 && dir == ios::cur)
+		if (which & ios::in) return read_pos - in_avail();
+		else if (which & ios::out) return write_pos - in_avail();
+		else return pos_type(-1);
+
     pos_type new_read_pos = read_pos;
     pos_type new_write_pos = write_pos;
     const pos_type blob_size = sqlite3_blob_bytes(blob);
@@ -953,6 +958,8 @@ blob_stream_buf::pos_type blob_stream_buf::seekoff(off_type off, ios_base::seekd
             return pos_type(-1);
         write_pos = new_write_pos;
     }
+    setg(nullptr, nullptr, nullptr);
+    underflow();
     return (which & ios::in) ? read_pos : write_pos;
 }
 
@@ -964,6 +971,8 @@ blob_stream_buf::pos_type blob_stream_buf::seekpos(pos_type pos, ios_base::openm
         read_pos = pos;
     if (which & ios::out)
         write_pos = pos;
+    setg(nullptr, nullptr, nullptr);
+    underflow();
     return pos;
 }
 
