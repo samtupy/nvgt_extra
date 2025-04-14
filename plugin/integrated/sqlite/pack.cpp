@@ -97,6 +97,54 @@ bool pack::open(const string& filename, int mode, const string& key) {
 	return true;
 }
 
+bool pack::create(const string& filename, const string& key) {
+	if (const auto rc = sqlite3_open_v2(filename.data(), &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_EXRESCODE, nullptr); rc != SQLITE_OK) {
+		return false;
+	}
+	if (!key.empty()) {
+		if (const auto rc = sqlite3_key_v2(db, "main", key.data(), key.size()); rc != SQLITE_OK) {
+			throw runtime_error(Poco::format("Internal error: Could not set key: %s", string(sqlite3_errmsg(db))));
+		}
+	}
+	if (const auto rc = sqlite3_exec(db, "pragma journal_mode=wal;", nullptr, nullptr, nullptr); rc != SQLITE_OK) {
+		throw runtime_error(Poco::format("Internal error: could not set journaling mode: %s", string(sqlite3_errmsg(db))));
+	}
+	if (const auto rc = sqlite3_exec(db, "create table if not exists pack_files(file_name primary key not null unique, data); create unique index if not exists pack_files_index on pack_files(file_name);", nullptr, nullptr, nullptr); rc != SQLITE_OK) {
+		throw runtime_error(Poco::format("Internal error: could not create table or index: %s", string(sqlite3_errmsg(db))));
+	}
+	if (const auto rc = sqlite3_db_config(db, SQLITE_DBCONFIG_DEFENSIVE, 1, NULL); rc != SQLITE_OK) {
+		throw runtime_error(Poco::format("Internal error: culd not set defensive mode: %s", string(sqlite3_errmsg(db))));
+	}
+	if (const auto rc = sqlite3_create_function_v2(db, "regexp", 2, SQLITE_UTF8 | SQLITE_DETERMINISTIC | SQLITE_DIRECTONLY, nullptr, &regexp, nullptr, nullptr, nullptr); rc != SQLITE_OK) {
+		throw runtime_error(Poco::format("Internal error: Could not register regexp function: %s", string(sqlite3_errmsg(db))));
+	}
+	return true;
+}
+
+bool pack::open(const string& filename, const string& key) {
+	if (const auto rc = sqlite3_open_v2(filename.data(), &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_EXRESCODE, nullptr); rc != SQLITE_OK) {
+		return false;
+	}
+	if (!key.empty()) {
+		if (const auto rc = sqlite3_key_v2(db, "main", key.data(), key.size()); rc != SQLITE_OK) {
+			throw runtime_error(Poco::format("Internal error: Could not set key: %s", string(sqlite3_errmsg(db))));
+		}
+	}
+	if (const auto rc = sqlite3_exec(db, "pragma journal_mode=wal;", nullptr, nullptr, nullptr); rc != SQLITE_OK) {
+		throw runtime_error(Poco::format("Internal error: could not set journaling mode: %s", string(sqlite3_errmsg(db))));
+	}
+	if (const auto rc = sqlite3_exec(db, "create table if not exists pack_files(file_name primary key not null unique, data); create unique index if not exists pack_files_index on pack_files(file_name);", nullptr, nullptr, nullptr); rc != SQLITE_OK) {
+		throw runtime_error(Poco::format("Internal error: could not create table or index: %s", string(sqlite3_errmsg(db))));
+	}
+	if (const auto rc = sqlite3_db_config(db, SQLITE_DBCONFIG_DEFENSIVE, 1, NULL); rc != SQLITE_OK) {
+		throw runtime_error(Poco::format("Internal error: culd not set defensive mode: %s", string(sqlite3_errmsg(db))));
+	}
+	if (const auto rc = sqlite3_create_function_v2(db, "regexp", 2, SQLITE_UTF8 | SQLITE_DETERMINISTIC | SQLITE_DIRECTONLY, nullptr, &regexp, nullptr, nullptr, nullptr); rc != SQLITE_OK) {
+		throw runtime_error(Poco::format("Internal error: Could not register regexp function: %s", string(sqlite3_errmsg(db))));
+	}
+	return true;
+}
+
 pack::~pack() {
 	if (db && !created_from_copy) {
 		sqlite3_close(db);
@@ -203,6 +251,70 @@ bool pack::add_directory(const string& dir, bool allow_replace) {
 		throw runtime_error(Poco::format("Could not commit transaction: %s", string(sqlite3_errmsg(db))));
 	}
 return true;
+}
+
+bool pack::add_stream(const string &internal_name, void* ds, const bool allow_replace) {
+	if (!ds) return false;
+	if (file_exists(internal_name)) {
+		if (allow_replace) {
+			delete_file(internal_name);
+		} else {
+			return false;
+		}
+	}
+	istream* is = dynamic_cast<istream*>(nvgt_datastream_get_ios(ds));
+	if (!is) return false;
+	uint64_t stream_size = 0;
+	is->seekg(0, ios::end);
+	stream_size = is->tellg();
+	is->seekg(0, ios::beg);
+	sqlite3_stmt* stmt;
+	if (const auto rc = sqlite3_prepare_v3(db, "insert into pack_files values(?, ?)", -1, 0, &stmt, nullptr); rc != SQLITE_OK) {
+		throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
+	}
+	if (const auto rc = sqlite3_bind_text64(stmt, 1, internal_name.data(), internal_name.size(), SQLITE_STATIC, SQLITE_UTF8); rc != SQLITE_OK) {
+		sqlite3_finalize(stmt);
+		throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
+	}
+	if (const auto rc = sqlite3_bind_zeroblob64(stmt, 2, stream_size); rc != SQLITE_OK) {
+		sqlite3_finalize(stmt);
+		throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
+	}
+	while (true) {
+		const auto rc = sqlite3_step(stmt);
+		if (rc == SQLITE_BUSY)
+			if (sqlite3_get_autocommit(db)) {
+				sqlite3_reset(stmt);
+				continue;
+			} else {
+				sqlite3_exec(db, "rollback", nullptr, nullptr, nullptr);
+				sqlite3_reset(stmt);
+				continue;
+			}
+		else if (rc == SQLITE_DONE) break;
+		else {
+			if (!sqlite3_get_autocommit(db)) sqlite3_exec(db, "rollback", nullptr, nullptr, nullptr);
+			sqlite3_finalize(stmt);
+			throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
+		}
+	}
+	sqlite3_finalize(stmt);
+	sqlite3_blob* blob;
+	if (const auto rc = sqlite3_blob_open(db, "main", "pack_files", "data", sqlite3_last_insert_rowid(db), 1, &blob); rc != SQLITE_OK) {
+		throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
+	}
+	char buffer[4096];
+	int offset = 0;
+	while (*is) {
+		is->read(buffer, 4096);
+		if (const auto rc = sqlite3_blob_write(blob, buffer, is->gcount(), offset); rc != SQLITE_OK) {
+			sqlite3_blob_close(blob);
+			throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
+		}
+		offset += is->gcount();
+	}
+	sqlite3_blob_close(blob);
+	return true;
 }
 
 bool pack::add_memory(const string& pack_filename, unsigned char* data, unsigned int size, bool allow_replace) {
@@ -426,6 +538,37 @@ void pack::list_files(std::vector<std::string>& files) {
 		}
 	}
 	sqlite3_finalize(stmt);
+}
+
+int64_t pack::get_file_count() {
+	sqlite3_stmt* stmt;
+	if (const auto rc = sqlite3_prepare_v3(db, "select count(file_name) from pack_files", -1, 0, &stmt, nullptr); rc != SQLITE_OK) {
+		throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
+	}
+	int64_t count = 0;
+	while (true) {
+		const auto rc = sqlite3_step(stmt);
+		if (rc == SQLITE_BUSY)
+			if (sqlite3_get_autocommit(db)) {
+				sqlite3_reset(stmt);
+				continue;
+			} else {
+				sqlite3_exec(db, "rollback", nullptr, nullptr, nullptr);
+				sqlite3_reset(stmt);
+				continue;
+			}
+		else if (rc == SQLITE_DONE) break;
+		else if (rc == SQLITE_ROW) {
+			count = sqlite3_column_int(stmt, 0);
+			break;
+		} else {
+			if (!sqlite3_get_autocommit(db)) sqlite3_exec(db, "rollback", nullptr, nullptr, nullptr);
+			sqlite3_finalize(stmt);
+			throw std::runtime_error(Poco::format("Cannot list files: %s", sqlite3_errmsg(db)));
+		}
+	}
+	sqlite3_finalize(stmt);
+	return count;
 }
 
 CScriptArray* pack::list_files() {
@@ -1065,7 +1208,7 @@ void RegisterScriptPack(asIScriptEngine* engine) {
 	engine->RegisterObjectBehaviour("sqlite_pack", asBEHAVE_FACTORY, "sqlite_pack @p()", asFUNCTION(ScriptPack_Factory), asCALL_CDECL);
 	engine->RegisterObjectBehaviour("sqlite_pack", asBEHAVE_ADDREF, "void f()", asMETHOD(pack, duplicate), asCALL_THISCALL);
 	engine->RegisterObjectBehaviour("sqlite_pack", asBEHAVE_RELEASE, "void f()", asMETHOD(pack, release), asCALL_THISCALL);
-	engine->RegisterObjectMethod("sqlite_pack", "bool open(const string &in filename, const int mode = SQLITE_PACK_OPEN_MODE_READ_ONLY, const string& key = \"\")", asMETHOD(pack, open), asCALL_THISCALL);
+	engine->RegisterObjectMethod("sqlite_pack", "bool open(const string &in filename, const int mode = SQLITE_PACK_OPEN_MODE_READ_ONLY, const string& key = \"\")", asMETHODPR(pack, open, (const string&, int, const string&), bool), asCALL_THISCALL);
 	engine->RegisterObjectMethod("sqlite_pack", "bool rekey(const string& key)", asMETHOD(pack, rekey), asCALL_THISCALL);
 	engine->RegisterObjectMethod("sqlite_pack", "bool close()", asMETHOD(pack, close), asCALL_THISCALL);
 	engine->RegisterObjectMethod("sqlite_pack", "bool add_file(const string &in disc_filename, const string& in pack_filename, bool allow_replace = false)", asMETHOD(pack, add_file), asCALL_THISCALL);
@@ -1088,5 +1231,9 @@ void RegisterScriptPack(asIScriptEngine* engine) {
 	engine->RegisterObjectMethod("sqlite_pack", "dictionary@[]@ exec(const string& sql)", asMETHOD(pack, exec), asCALL_THISCALL);
 	engine->RegisterObjectMethod("sqlite_pack", "pack_interface@ opImplCast()", asFUNCTION((pack_interface::op_cast<pack, pack_interface>)), asCALL_CDECL_OBJFIRST);
 	engine->RegisterObjectMethod("sqlite_pack", "sqlite_pack@ opCast()", asFUNCTION((pack_interface::op_cast<pack_interface, pack>)), asCALL_CDECL_OBJFIRST);
+	engine->RegisterObjectMethod("sqlite_pack", "bool create(const string &in filename, const string&in key = \"\")", asMETHOD(pack, create), asCALL_THISCALL);
+	engine->RegisterObjectMethod("sqlite_pack", "bool open(const string &in filename, const string &in key = \"\")", asMETHODPR(pack, open, (const string&, const string&), bool), asCALL_THISCALL);
+	engine->RegisterObjectMethod("sqlite_pack", "bool add_stream(const string &in internal_name, datastream@ ds, const bool allow_replace=false)", asMETHOD(pack, add_stream), asCALL_THISCALL);
+	engine->RegisterObjectMethod("sqlite_pack", "int64 get_file_count() const property", asMETHOD(pack, get_file_count), asCALL_THISCALL);
 }
 

@@ -44,12 +44,15 @@ public:
 	pack(const pack& other);
 	~pack();
 	bool open(const std::string& filename, int mode, const std::string& key);
+	bool create(const std::string& filename, const std::string& key);
+	bool open(const std::string& filename, const std::string& key);
 	bool rekey(const std::string& key);
 	bool close();
 	bool add_file(const std::string& disk_filename, const std::string& pack_filename, bool allow_replace = false);
 	bool add_directory(const std::string& dir, bool allow_replace = false);
 	bool add_memory(const std::string& pack_filename, unsigned char* data, unsigned int size, bool allow_replace = false);
 	bool add_memory(const std::string& pack_filename, const std::string& data, bool allow_replace = false);
+	bool add_stream(const std::string &internal_name, void* ds, const bool allow_replace);
 	bool delete_file(const std::string& pack_filename);
 	bool file_exists(const std::string& pack_filename);
 	std::string get_file_name(std::int64_t idx);
@@ -59,6 +62,7 @@ public:
 	unsigned int read_file(const std::string& pack_filename, unsigned int offset, unsigned char* buffer, unsigned int size);
 	std::string read_file_string(const std::string& pack_filename, unsigned int offset, unsigned int size);
 	std::uint64_t size();
+	int64_t get_file_count();
 	bool is_active() {
 		return db;
 	}
