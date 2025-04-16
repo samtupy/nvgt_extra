@@ -39,6 +39,7 @@ private:
 	sqlite3* db;
 	bool created_from_copy;
 	const pack* mutable_origin;
+	std::string pack_name;
 public:
 	pack();
 	pack(const pack& other);
@@ -79,6 +80,8 @@ public:
 	void set_db_ptr(sqlite3* ptr);
 	const pack_interface* make_immutable() const override;
 	const pack_interface* get_mutable() const override;
+	const std::string get_pack_name() const override;
+	bool extract_file(const std::string &internal_name, const std::string &file_on_disk);
 };
 
 class blob_stream_buf: public Poco::BufferedBidirectionalStreamBuf {

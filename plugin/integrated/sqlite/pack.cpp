@@ -25,6 +25,8 @@
 #include <algorithm>
 #include <Poco/RegularExpression.h>
 #include <type_traits>
+#include <array>
+#include <algorithm>
 
 using namespace std;
 
@@ -94,6 +96,7 @@ bool pack::open(const string& filename, int mode, const string& key) {
 	if (const auto rc = sqlite3_create_function_v2(db, "regexp", 2, SQLITE_UTF8 | SQLITE_DETERMINISTIC | SQLITE_DIRECTONLY, nullptr, &regexp, nullptr, nullptr, nullptr); rc != SQLITE_OK) {
 		throw runtime_error(Poco::format("Internal error: Could not register regexp function: %s", string(sqlite3_errmsg(db))));
 	}
+	pack_name = std::filesystem::canonical(filename).string();
 	return true;
 }
 
@@ -118,6 +121,7 @@ bool pack::create(const string& filename, const string& key) {
 	if (const auto rc = sqlite3_create_function_v2(db, "regexp", 2, SQLITE_UTF8 | SQLITE_DETERMINISTIC | SQLITE_DIRECTONLY, nullptr, &regexp, nullptr, nullptr, nullptr); rc != SQLITE_OK) {
 		throw runtime_error(Poco::format("Internal error: Could not register regexp function: %s", string(sqlite3_errmsg(db))));
 	}
+	pack_name = std::filesystem::canonical(filename).string();
 	return true;
 }
 
@@ -142,6 +146,7 @@ bool pack::open(const string& filename, const string& key) {
 	if (const auto rc = sqlite3_create_function_v2(db, "regexp", 2, SQLITE_UTF8 | SQLITE_DETERMINISTIC | SQLITE_DIRECTONLY, nullptr, &regexp, nullptr, nullptr, nullptr); rc != SQLITE_OK) {
 		throw runtime_error(Poco::format("Internal error: Could not register regexp function: %s", string(sqlite3_errmsg(db))));
 	}
+	pack_name = std::filesystem::canonical(filename).string();
 	return true;
 }
 
@@ -215,7 +220,7 @@ bool pack::add_file(const string& disk_filename, const string& pack_filename, bo
 	if (const auto rc = sqlite3_blob_open(db, "main", "pack_files", "data", sqlite3_last_insert_rowid(db), 1, &blob); rc != SQLITE_OK) {
 		throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
 	}
-	ifstream stream(filesystem::absolute(disk_filename), ios::in | ios::binary);
+	ifstream stream(filesystem::canonical(disk_filename).string(), ios::in | ios::binary);
 	char buffer[4096];
 	int offset = 0;
 	while (stream) {
@@ -995,7 +1000,7 @@ CScriptArray* pack::find(const std::string& what, const FindMode mode) {
 CScriptArray* pack::exec(const std::string& sql) {
 	asIScriptContext* ctx = asGetActiveContext();
 	asIScriptEngine* engine = ctx->GetEngine();
-	asITypeInfo* arrayType = engine->GetTypeInfoByDecl("array<string>");
+	asITypeInfo* arrayType = engine->GetTypeInfoByDecl("array<dictionary@>");
 	CScriptArray* array = CScriptArray::Create(arrayType);
 	char* errmsg;
 	if (const auto rc = sqlite3_exec(db, sql.data(), [](void* arr, int column_count, char** column_data, char** columns) -> int {
@@ -1047,6 +1052,73 @@ sqlite3* pack::get_db_ptr() const {
 void pack::set_db_ptr(sqlite3* ptr) {
 	if (!ptr) throw std::runtime_error("db pointer is null!");
 	db = ptr;
+}
+
+const std::string pack::get_pack_name() const {
+	return pack_name;
+}
+
+bool pack::extract_file(const std::string &internal_name, const std::string &file_on_disk) {
+	if (!file_exists(internal_name)) return false;
+	sqlite3_stmt* stmt;
+	int64_t rowid = 0;
+	if (const auto rc = sqlite3_prepare_v3(db, "select rowid from pack_files where file_name = ?", -1, 0, &stmt, nullptr); rc != SQLITE_OK) {
+		throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
+	}
+	if (const auto rc = sqlite3_bind_text64(stmt, 1, internal_name.data(), internal_name.size(), SQLITE_STATIC, SQLITE_UTF8); rc != SQLITE_OK) {
+		sqlite3_finalize(stmt);
+		throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
+	}
+	while (true) {
+		const auto rc = sqlite3_step(stmt);
+		if (rc == SQLITE_BUSY)
+			if (sqlite3_get_autocommit(db)) {
+				sqlite3_reset(stmt);
+				continue;
+			} else {
+				sqlite3_exec(db, "rollback", nullptr, nullptr, nullptr);
+				sqlite3_reset(stmt);
+				continue;
+			}
+		else if (rc == SQLITE_ROW) {
+			rowid = sqlite3_column_int64(stmt, 0);
+			break;
+		} else {
+			if (!sqlite3_get_autocommit(db)) sqlite3_exec(db, "rollback", nullptr, nullptr, nullptr);
+			sqlite3_finalize(stmt);
+			throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
+		}
+	}
+	sqlite3_finalize(stmt);
+	sqlite3_blob* blob;
+	if (const auto rc = sqlite3_blob_open(db, "main", "pack_files", "data", rowid, 0, &blob); rc != SQLITE_OK) {
+		throw runtime_error(string(sqlite3_errmsg(db)));
+	}
+	std::ofstream stream(file_on_disk, ios::out | ios::binary);
+	if (!stream) {
+		sqlite3_blob_close(blob);
+		return false;
+	}
+	std::array<char, 4096> buffer;
+	int offset = 0;
+	const auto blob_size = sqlite3_blob_bytes(blob);
+	while (stream) {
+		if (offset >= sqlite3_blob_bytes(blob)) {
+			break;
+		}
+		const int remaining = blob_size - offset;
+		if (remaining < 0) throw std::runtime_error("Internal error: remaining bytes to write is negative! Please report this bug!");
+		const auto& to_read    = std::min(static_cast<int>(buffer.size()), remaining);
+		if (const auto rc = sqlite3_blob_read(blob, buffer.data(), to_read, offset); rc != SQLITE_OK) {
+			sqlite3_blob_close(blob);
+			throw runtime_error(string(sqlite3_errmsg(db)));
+		}
+		stream.write(buffer.data(), to_read);
+		offset += to_read;
+	}
+	sqlite3_blob_close(blob);
+	if (stream.bad() || stream.fail()) return false;
+	return true;
 }
 
 sqlite3statement* pack::prepare(const string& statement, const bool persistant) {
@@ -1235,5 +1307,6 @@ void RegisterScriptPack(asIScriptEngine* engine) {
 	engine->RegisterObjectMethod("sqlite_pack", "bool open(const string &in filename, const string &in key = \"\")", asMETHODPR(pack, open, (const string&, const string&), bool), asCALL_THISCALL);
 	engine->RegisterObjectMethod("sqlite_pack", "bool add_stream(const string &in internal_name, datastream@ ds, const bool allow_replace=false)", asMETHOD(pack, add_stream), asCALL_THISCALL);
 	engine->RegisterObjectMethod("sqlite_pack", "int64 get_file_count() const property", asMETHOD(pack, get_file_count), asCALL_THISCALL);
+	engine->RegisterObjectMethod("sqlite_pack", "bool extract_file(const string &in internal_name, const string &in file_on_disk)", asMETHOD(pack, extract_file), asCALL_THISCALL);
 }
 
