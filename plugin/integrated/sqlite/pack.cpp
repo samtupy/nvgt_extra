@@ -50,6 +50,7 @@ void regexp (sqlite3_context* ctx, int argc, sqlite3_value** argv) {
 		const string string_to_match(reinterpret_cast<const char*>(sqlite3_value_text(argv[1])));
 		Poco::RegularExpression regexp(expr, Poco::RegularExpression::RE_EXTRA | Poco::RegularExpression::RE_NOTEMPTY | Poco::RegularExpression::RE_UTF8 | Poco::RegularExpression::RE_NO_UTF8_CHECK | Poco::RegularExpression::RE_NEWLINE_ANY);
 		Poco::RegularExpression::Match match;
+		regexp.match(string_to_match, match);
 		if (match.offset == string::npos && match.length == 0) {
 			sqlite3_result_int(ctx, 0);
 			return;
@@ -712,7 +713,7 @@ unsigned int pack::read_file(const string& pack_filename, unsigned int offset, u
 	}
 	if (offset >= sqlite3_blob_bytes(blob) || size > sqlite3_blob_bytes(blob) || (offset + size) > sqlite3_blob_bytes(blob)) {
 		sqlite3_blob_close(blob);
-		return 0;
+		return "";
 	}
 	if (const auto rc = sqlite3_blob_read(blob, buffer, size, offset); rc != SQLITE_OK) {
 		sqlite3_blob_close(blob);
@@ -954,12 +955,12 @@ CScriptArray* pack::find(const std::string& what, const FindMode mode) {
 			}
 		} break;
 		case FindMode::Glob: {
-			if (const auto rc = sqlite3_prepare_v3(db, "select file_name from pack_files where ? glob file_name", -1, 0, &stmt, nullptr); rc != SQLITE_OK) {
+			if (const auto rc = sqlite3_prepare_v3(db, "select file_name from pack_files where file_name glob ?", -1, 0, &stmt, nullptr); rc != SQLITE_OK) {
 				throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
 			}
 		} break;
 		case FindMode::Regexp: {
-			if (const auto rc = sqlite3_prepare_v3(db, "select file_name from pack_files where ? regexp file_name", -1, 0, &stmt, nullptr); rc != SQLITE_OK) {
+			if (const auto rc = sqlite3_prepare_v3(db, "select file_name from pack_files where file_name regexp ?", -1, 0, &stmt, nullptr); rc != SQLITE_OK) {
 				throw runtime_error(Poco::format("Internal error: %s", string(sqlite3_errmsg(db))));
 			}
 		} break;
@@ -1020,9 +1021,11 @@ CScriptArray* pack::exec(const std::string& sql) {
 		array->InsertLast(&d);
 		return 0;
 	}, array, &errmsg); rc != SQLITE_OK) {
-		if (errmsg)
-			throw runtime_error(errmsg);
-		else
+		if (errmsg) {
+			string error(errmsg);
+			sqlite3_free(errmsg); // Must explicitly free errmsg as it is allocated with sqlite3_malloc
+			throw runtime_error(error);
+		} else
 			throw runtime_error("Unknown error");
 	}
 	return array;
