@@ -713,7 +713,7 @@ unsigned int pack::read_file(const string& pack_filename, unsigned int offset, u
 	}
 	if (offset >= sqlite3_blob_bytes(blob) || size > sqlite3_blob_bytes(blob) || (offset + size) > sqlite3_blob_bytes(blob)) {
 		sqlite3_blob_close(blob);
-		return "";
+		return 0;
 	}
 	if (const auto rc = sqlite3_blob_read(blob, buffer, size, offset); rc != SQLITE_OK) {
 		sqlite3_blob_close(blob);
@@ -1111,7 +1111,7 @@ bool pack::extract_file(const std::string &internal_name, const std::string &fil
 		}
 		const int remaining = blob_size - offset;
 		if (remaining < 0) throw std::runtime_error("Internal error: remaining bytes to write is negative! Please report this bug!");
-		const auto& to_read    = std::min(static_cast<int>(buffer.size()), remaining);
+		const auto to_read    = static_cast<int>(buffer.size()) < remaining ? static_cast<int>(buffer.size()) : remaining;
 		if (const auto rc = sqlite3_blob_read(blob, buffer.data(), to_read, offset); rc != SQLITE_OK) {
 			sqlite3_blob_close(blob);
 			throw runtime_error(string(sqlite3_errmsg(db)));
