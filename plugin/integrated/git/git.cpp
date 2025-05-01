@@ -446,5 +446,6 @@ plugin_main(nvgt_plugin_shared* shared) {
 	prepare_plugin(shared);
 	g_ScriptEngine = shared->script_engine;
 	RegisterGit(shared->script_engine);
+	nvgt_bundle_shared_library("git2");
 	return true;
 }
