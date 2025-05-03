@@ -1305,7 +1305,7 @@ void RegisterScriptPack(asIScriptEngine* engine) {
 	engine->RegisterObjectMethod("sqlite_pack", "string[]@ find(const string& what, const sqlite_pack_find_mode mode = SQLITE_PACK_FIND_MODE_LIKE)", asMETHOD(pack, find), asCALL_THISCALL);
 	engine->RegisterObjectMethod("sqlite_pack", "dictionary@[]@ exec(const string& sql)", asMETHOD(pack, exec), asCALL_THISCALL);
 	engine->RegisterObjectMethod("sqlite_pack", "pack_interface@ opImplCast()", asFUNCTION((pack_interface::op_cast<pack, pack_interface>)), asCALL_CDECL_OBJFIRST);
-	engine->RegisterObjectMethod("sqlite_pack", "sqlite_pack@ opCast()", asFUNCTION((pack_interface::op_cast<pack_interface, pack>)), asCALL_CDECL_OBJFIRST);
+	engine->RegisterObjectMethod("pack_interface", "sqlite_pack@ opCast()", asFUNCTION((pack_interface::op_cast<pack_interface, pack>)), asCALL_CDECL_OBJFIRST);
 	engine->RegisterObjectMethod("sqlite_pack", "bool create(const string &in filename, const string&in key = \"\")", asMETHOD(pack, create), asCALL_THISCALL);
 	engine->RegisterObjectMethod("sqlite_pack", "bool open(const string &in filename, const string &in key = \"\")", asMETHODPR(pack, open, (const string&, const string&), bool), asCALL_THISCALL);
 	engine->RegisterObjectMethod("sqlite_pack", "bool add_stream(const string &in internal_name, datastream@ ds, const bool allow_replace=false)", asMETHOD(pack, add_stream), asCALL_THISCALL);
