@@ -1135,11 +1135,11 @@ bool pack::extract_file(const std::string &internal_name, const std::string &fil
 }
 
 void pack::set_key(const string& key) {
-	this->key = key;
+	pack_key = key;
 }
 
 string pack::get_key() const {
-	return key;
+	return pack_key;
 }
 
 sqlite3statement* pack::prepare(const string& statement, const bool persistant) {
