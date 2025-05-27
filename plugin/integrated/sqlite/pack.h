@@ -38,7 +38,7 @@ class pack : public pack_interface {
 private:
 	sqlite3* db;
 	bool created_from_copy;
-	const pack* mutable_origin;
+	pack* mutable_origin;
 	std::string pack_name;
 	std::string pack_key;
 public:
