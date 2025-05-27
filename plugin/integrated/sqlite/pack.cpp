@@ -71,7 +71,13 @@ pack::pack() {
 }
 
 pack::pack(const pack& other) : mutable_origin(&other) {
-	set_db_ptr(other.get_db_ptr());
+	const auto dbptr = other.get_db_ptr();
+	const auto filename = sqlite3_filename_database(sqlite3_db_filename(dbptr, "main"));
+	if (!filename) throw std::runtime_error("Cannot create a read-only copy of an in-memory or temporary pack!");
+	const auto key = other.get_key();
+	if (db) close();
+	db = nullptr;
+	if (!open(string(filename), SQLITE_OPEN_READONLY, string(key))) throw std::runtime_error("Could not open pack in R/O mode!");
 	other.duplicate();
 	created_from_copy = true;
 }
@@ -84,6 +90,7 @@ bool pack::open(const string& filename, int mode, const string& key) {
 		if (const auto rc = sqlite3_key_v2(db, "main", key.data(), key.size()); rc != SQLITE_OK) {
 			throw runtime_error(Poco::format("Internal error: Could not set key: %s", string(sqlite3_errmsg(db))));
 		}
+		set_key(key);
 	}
 	if (const auto rc = sqlite3_exec(db, "pragma journal_mode=wal;", nullptr, nullptr, nullptr); rc != SQLITE_OK) {
 		throw runtime_error(Poco::format("Internal error: could not set journaling mode: %s", string(sqlite3_errmsg(db))));
@@ -109,6 +116,7 @@ bool pack::create(const string& filename, const string& key) {
 		if (const auto rc = sqlite3_key_v2(db, "main", key.data(), key.size()); rc != SQLITE_OK) {
 			throw runtime_error(Poco::format("Internal error: Could not set key: %s", string(sqlite3_errmsg(db))));
 		}
+		set_key(key);
 	}
 	if (const auto rc = sqlite3_exec(db, "pragma journal_mode=wal;", nullptr, nullptr, nullptr); rc != SQLITE_OK) {
 		throw runtime_error(Poco::format("Internal error: could not set journaling mode: %s", string(sqlite3_errmsg(db))));
@@ -134,6 +142,7 @@ bool pack::open(const string& filename, const string& key) {
 		if (const auto rc = sqlite3_key_v2(db, "main", key.data(), key.size()); rc != SQLITE_OK) {
 			throw runtime_error(Poco::format("Internal error: Could not set key: %s", string(sqlite3_errmsg(db))));
 		}
+		set_key(key);
 	}
 	if (const auto rc = sqlite3_exec(db, "pragma journal_mode=wal;", nullptr, nullptr, nullptr); rc != SQLITE_OK) {
 		throw runtime_error(Poco::format("Internal error: could not set journaling mode: %s", string(sqlite3_errmsg(db))));
@@ -162,6 +171,7 @@ bool pack::rekey(const string& key) {
 	if (const auto rc = sqlite3_rekey_v2(db, "main", key.data(), key.size()); rc != SQLITE_OK) {
 		return false;
 	}
+	set_key(key);
 	return true;
 }
 
@@ -1122,6 +1132,14 @@ bool pack::extract_file(const std::string &internal_name, const std::string &fil
 	sqlite3_blob_close(blob);
 	if (stream.bad() || stream.fail()) return false;
 	return true;
+}
+
+void pack::set_key(const string& key) {
+	this->key = key;
+}
+
+string pack::get_key() const {
+	return key;
 }
 
 sqlite3statement* pack::prepare(const string& statement, const bool persistant) {

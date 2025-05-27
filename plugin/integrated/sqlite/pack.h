@@ -40,6 +40,7 @@ private:
 	bool created_from_copy;
 	const pack* mutable_origin;
 	std::string pack_name;
+	std::string pack_key;
 public:
 	pack();
 	pack(const pack& other);
@@ -82,6 +83,8 @@ public:
 	const pack_interface* get_mutable() const override;
 	const std::string get_pack_name() const override;
 	bool extract_file(const std::string &internal_name, const std::string &file_on_disk);
+	void set_key(const std::string& key);
+	std::string get_key() const;
 };
 
 class blob_stream_buf: public Poco::BufferedBidirectionalStreamBuf {
