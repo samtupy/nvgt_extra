@@ -80,7 +80,7 @@ public:
 	sqlite3* get_db_ptr() const;
 	void set_db_ptr(sqlite3* ptr);
 	const pack_interface* make_immutable() const override;
-	const pack_interface* get_mutable() const override;
+	pack_interface* get_mutable() const override;
 	const std::string get_pack_name() const override;
 	bool extract_file(const std::string &internal_name, const std::string &file_on_disk);
 	void set_key(const std::string& key);

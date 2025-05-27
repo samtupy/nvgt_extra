@@ -1154,7 +1154,7 @@ const pack_interface* pack::make_immutable() const {
 	return new pack(*this);
 }
 
-const pack_interface* pack::get_mutable() const {
+pack_interface* pack::get_mutable() const {
 	if (mutable_origin) {
 		mutable_origin->duplicate();
 		return mutable_origin;
