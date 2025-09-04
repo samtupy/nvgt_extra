@@ -65,7 +65,7 @@ public:
 	std::string read_file_string(const std::string& pack_filename, unsigned int offset, unsigned int size);
 	std::uint64_t size();
 	int64_t get_file_count();
-	bool is_active() {
+	bool get_is_active() const override {
 		return db;
 	}
 	blob_stream open_file_stream(const std::string& file_name, const bool rw);

@@ -1313,7 +1313,7 @@ void RegisterScriptPack(asIScriptEngine* engine) {
 	engine->RegisterObjectMethod("sqlite_pack", "string[]@ list_files() const", asMETHODPR(pack, list_files, (), CScriptArray*), asCALL_THISCALL);
 	engine->RegisterObjectMethod("sqlite_pack", "uint get_file_size(const string &in pack_filename) const", asMETHOD(pack, get_file_size), asCALL_THISCALL);
 	engine->RegisterObjectMethod("sqlite_pack", "string read_file(const string &in pack_filename, uint offset_in_file, uint read_byte_count) const", asMETHOD(pack, read_file_string), asCALL_THISCALL);
-	engine->RegisterObjectMethod("sqlite_pack", "bool get_active() const property", asMETHOD(pack, is_active), asCALL_THISCALL);
+	engine->RegisterObjectMethod("sqlite_pack", "bool get_active() const property", asMETHOD(pack, get_is_active), asCALL_THISCALL);
 	engine->RegisterObjectMethod("sqlite_pack", "uint get_size() const property", asMETHOD(pack, size), asCALL_THISCALL);
 	engine->RegisterObjectMethod("sqlite_pack", "datastream@ open_file(const string& file_name, const bool rw)", asMETHODPR(pack, open_file, (const string &, const bool), void*), asCALL_THISCALL);
 	engine->RegisterObjectMethod("sqlite_pack", "void allocate_file(const string& file_name, const int64 size, const bool allow_replace = false)", asMETHODPR(pack, allocate_file, (const string&, const int64_t, const bool), void), asCALL_THISCALL);
