@@ -1,0 +1,77 @@
+#include"bgt_compat.nvgt"
+#include"logger.nvgt"
+class log_kit
+{
+logger l;
+bool debug = false;
+string filename;
+bool log_at_startup = false;
+string startup_text;
+log_kit(string filename = "log.log", bool log_at_startup = false,string startup_text = "")
+{
+this.filename = filename;
+this.log_at_startup = log_at_startup;
+this.startup_text = startup_text;
+if(log_at_startup)
+{
+log(startup_text);
+}
+}
+private void flush()
+{
+l.write(filename,false);
+l.reset();
+}
+void debug_log(string text)
+{
+if(debug)
+{
+l.add_entry("debug. \r\n"+text);
+flush();
+}
+}
+void log(string text)
+{
+l.add_entry(text);
+flush();
+}
+void log_info(string text)
+{
+log("info.\r\n"+text);
+}
+void log_warning(string text)
+{
+log("warning!\r\n"+text);
+}
+void log_error(string text)
+{
+log("error!\r\n"+text);
+}
+void log_fatal(string text)
+{
+log("fadle!\r\n"+text);
+}
+void delete_log()
+{
+file_delete(filename);
+}
+void toggle_date_all(bool toggle)
+{
+l.date_all_entries = toggle;
+}
+void toggle_debug(bool toggle)
+{
+debug = toggle;
+}
+void generate_system_log()
+{
+string output;
+output+= "ARCHITECTURE: "+PLATFORM_ARCHITECTURE;
+output+= "platform display name: "+PLATFORM_DISPLAY_NAME;
+output+= "platform version:" +PLATFORM_VERSION;
+output+="processors: "+PROCESSOR_COUNT;
+output+= "system host name: "+system_node_name;
+output+= "system node id: "+system_node_id;
+log(output);
+}
+}
