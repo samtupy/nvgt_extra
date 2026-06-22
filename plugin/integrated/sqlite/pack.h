@@ -32,6 +32,12 @@ enum class FindMode {
 	Regexp
 };
 
+struct pack_entry {
+	std::string name;
+	uint64_t size;
+	int64_t rowid;
+};
+
 class blob_stream;
 
 class pack : public pack_interface {
@@ -47,7 +53,7 @@ public:
 	~pack();
 	bool open(const std::string& filename, int mode, const std::string& key);
 	bool create(const std::string& filename, const std::string& key);
-	bool open(const std::string& filename, const std::string& key);
+	bool open(const std::string& filename, const std::string& key, bool rw = false);
 	bool rekey(const std::string& key);
 	bool close();
 	bool add_file(const std::string& disk_filename, const std::string& pack_filename, bool allow_replace = false);
@@ -85,12 +91,16 @@ public:
 	bool extract_file(const std::string &internal_name, const std::string &file_on_disk);
 	void set_key(const std::string& key);
 	std::string get_key() const;
+private:
+	int64_t get_rowid(const std::string& filename) const;
+	void load_entry_cache() const;
+	mutable std::unordered_map<std::string, pack_entry> entry_cache;
 };
 
 class blob_stream_buf: public Poco::BufferedBidirectionalStreamBuf {
 	using pos_type = std::basic_streambuf<char, std::char_traits<char>>::pos_type;
 public:
-	blob_stream_buf();
+	blob_stream_buf(bool read_write = false);
 	~blob_stream_buf();
 	void open(sqlite3* s, const std::string_view& db, const std::string_view& table, const std::string_view& column, const sqlite3_int64 row, const bool read_write);
 protected:
@@ -101,11 +111,12 @@ private:
 	int readFromDevice(char_type* buffer, std::streamsize length) override;
 	int writeToDevice(const char_type* buffer, std::streamsize length) override;
 	sqlite3_blob* blob;
+	int blob_size;
 };
 
 class blob_ios: public virtual std::ios {
 public:
-	blob_ios();
+	blob_ios(bool read_write = false);
 	void open(sqlite3* s, const std::string_view& db, const std::string_view& table, const std::string_view& column, const sqlite3_int64 row, const bool read_write);
 	blob_stream_buf* rdbuf();
 protected:
