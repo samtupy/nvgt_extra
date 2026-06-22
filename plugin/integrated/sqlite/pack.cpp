@@ -560,7 +560,7 @@ blob_stream_buf::pos_type blob_stream_buf::seekoff(off_type off, ios_base::seekd
 		if (sync() == -1) return pos_type(-1);
 	off_type current_pos;
 	if ((which & ios_base::in) != 0)
-		current_pos = read_pos - (egptr() - gptr());
+		current_pos = read_pos - pos_type(egptr() - gptr());
 	else if ((which & ios_base::out) != 0)
 		current_pos = write_pos;
 	else
