@@ -1,0 +1,13 @@
+#include"speech.nvgt"
+#include"../includes/log_kit.nvgt"
+log_kit l("test.log",false);
+void main()
+{
+l.log("test");
+l.log_info("Health: 100");
+l.log_warning("health is abuv 100. health: 150");
+l.log_error("map failed to build");
+l.log_fatal("Server is down.");
+speak("log written, search for test.log. exiting...");
+exit();
+}
