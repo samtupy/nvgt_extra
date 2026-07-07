@@ -5,11 +5,11 @@ winlibs = ""
 if env["NVGT_TARGET"] == "windows": winlibs = "kernel32 user32 crypt32 advapi32 iphlpapi netapi32 uuid wldap32 ws2_32 normaliz bcrypt"
 if ARGUMENTS.get("no_shared_plugins", "0") == "0":
 	if env["NVGT_TARGET"] == "windows":
-		env.SharedLibrary("#release/lib/nvgt_curl", ["internet.cpp", scriptarray], LIBS = Split(winlibs) + ["curl", "zs", "ssl", "crypto"], CPPDEFINES = ["CURL_STATICLIB"])
+		env.SharedLibrary(env["PLUGIN_DEST_DIR"] + "/nvgt_curl", ["internet.cpp", scriptarray], LIBS = Split(winlibs) + ["curl", "zs", "ssl", "crypto"], CPPDEFINES = ["CURL_STATICLIB"])
 	elif env["NVGT_TARGET"] == "macos":
-		env.SharedLibrary("#release/lib/nvgt_curl", ["internet.cpp", scriptarray], LIBS = ["curl", "z", "ssl", "crypto"], FRAMEWORKS = ["Foundation", "Security", "SystemConfiguration"], CPPDEFINES = ["CURL_STATICLIB"], LINKFLAGS = ["-Wl,-undefined,error"])
+		env.SharedLibrary(env["PLUGIN_DEST_DIR"] + "/nvgt_curl", ["internet.cpp", scriptarray], LIBS = ["curl", "z", "ssl", "crypto"], FRAMEWORKS = ["Foundation", "Security", "SystemConfiguration"], CPPDEFINES = ["CURL_STATICLIB"], LINKFLAGS = ["-Wl,-undefined,error"])
 	else:
-		env.SharedLibrary("#release/lib/nvgt_curl", ["internet.cpp", scriptarray], LIBS = [":libcurl.a", ":libz.a", ":libssl.a", ":libcrypto.a"], CPPDEFINES = ["CURL_STATICLIB"], LINKFLAGS = ["-Wl,--no-undefined"])
+		env.SharedLibrary(env["PLUGIN_DEST_DIR"] + "/nvgt_curl", ["internet.cpp", scriptarray], LIBS = [":libcurl.a", ":libz.a", ":libssl.a", ":libcrypto.a"], CPPDEFINES = ["CURL_STATICLIB"], LINKFLAGS = ["-Wl,--no-undefined"])
 static = env.Object("internet_static", "internet.cpp", CPPDEFINES = [("NVGT_PLUGIN_STATIC", "nvgt_curl"), "CURL_STATICLIB"])
 static = env.StaticLibrary("#build/lib/nvgt_curl", [static], LIBS = ["curl"])
 static = [static, "curl"]
