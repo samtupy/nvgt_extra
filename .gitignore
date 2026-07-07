@@ -1,4 +1,5 @@
 *.dat
 *.obj
+*.o
 *.os
 *.pack

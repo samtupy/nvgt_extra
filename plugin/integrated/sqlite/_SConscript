@@ -7,7 +7,7 @@ defines = ["SQLITE_CORE", "SQLITE_ENABLE_CARRAY=1", "SQLITE_ENABLE_CSV=1", "SQLI
 avxenv.Append(CPPPATH=["#extra/plugin/dep/sqlite3"])
 if avxenv["NVGT_TARGET"] == "windows":
 	avxenv.Append(CCFLAGS=["/arch:AVX"])
-else:
+elif avxenv["NVGT_TARGET"] != "android":
 	avxenv.Append(CCFLAGS=["-mavx", "-maes"])
 if avxenv["NVGT_TARGET"] == "macos":
 	avxenv.Append(FRAMEWORKS=["Security", "Foundation"])
