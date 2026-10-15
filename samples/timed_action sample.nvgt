@@ -1,0 +1,20 @@
+#include"speech.nvgt"
+#include"../includes/timed_action.nvgt"
+void main()
+{
+show_window("timed action tester");
+timed_action speaker(1000);
+while(true)
+{
+wait(5);
+if(speaker.trigger())
+{
+speak("hi");
+}
+if(key_pressed(KEY_ESCAPE))
+{
+speak("exiting...");
+exit();
+}
+}
+}

@@ -1,0 +1,39 @@
+class timed_action
+{
+timer t;
+int interval;
+timed_action(int interval)
+{
+this.interval = interval;
+}
+void restart()
+{
+t.restart();
+}
+bool trigger()
+{
+if(t.elapsed>=interval)
+{
+restart();
+return true;
+}
+return false;
+}
+bool check()
+{
+return t.elapsed>=interval;
+}
+void set_interval(int i, bool restart_timer = true)
+{
+interval = i;
+if(restart_timer)
+{
+restart();
+}
+}
+int get_elapsed()
+{
+return t.elapsed;
+}
+
+}
