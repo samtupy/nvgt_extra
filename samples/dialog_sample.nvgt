@@ -1,0 +1,8 @@
+#include"../includes/dialog.nvgt"
+void main()
+{
+show_window("dialog tester");
+dlg("please press enter");
+screen_reader_speak("exiting");
+exit();
+}

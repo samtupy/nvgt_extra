@@ -1,0 +1,43 @@
+#include"speech.nvgt"
+void dlg(string text, bool silent = false)
+{
+if(!silent)
+{
+screen_reader_speak(text);
+}
+while(true)
+{
+wait(5);
+if(key_pressed(KEY_LEFT) or key_pressed(KEY_RIGHT) or key_pressed(KEY_DOWN) or key_pressed(KEY_UP))
+{
+screen_reader_speak(text);
+}
+if(key_pressed(KEY_RETURN))
+{
+break;
+}
+}
+}
+void sound_dlg(string filename, string text = "")
+{
+sound player;
+player.load(filename);
+player.play();
+while(true)
+{
+if(key_pressed(KEY_UP) or key_pressed(KEY_LEFT) or key_pressed(KEY_RIGHT) or key_pressed(KEY_DOWN))
+{
+if(text != "")
+{
+speak(text);
+}
+}
+else if(key_pressed(KEY_RETURN))
+{
+player.stop();
+player.close();
+break;
+return;
+}
+}
+}
