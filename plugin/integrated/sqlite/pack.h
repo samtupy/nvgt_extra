@@ -108,8 +108,8 @@ protected:
 	pos_type seekpos(pos_type pos, std::ios_base::openmode which = std::ios_base::in | std::ios_base::out ) override;
 private:
 	pos_type read_pos, write_pos;
-	int readFromDevice(char_type* buffer, std::streamsize length) override;
-	int writeToDevice(const char_type* buffer, std::streamsize length) override;
+	std::streamsize readFromDevice(char_type* buffer, std::streamsize length) override;
+	std::streamsize writeToDevice(const char_type* buffer, std::streamsize length) override;
 	sqlite3_blob* blob;
 	int blob_size;
 };
