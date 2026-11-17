@@ -9,7 +9,7 @@ if ARGUMENTS.get("no_shared_plugins", "0") == "0":
 	elif env["NVGT_TARGET"] == "macos":
 		env.SharedLibrary(env["PLUGIN_DEST_DIR"] + "/nvgt_curl", ["internet.cpp", scriptarray], LIBS = ["curl", "z", "ssl", "crypto"], FRAMEWORKS = ["Foundation", "Security", "SystemConfiguration"], CPPDEFINES = ["CURL_STATICLIB"], LINKFLAGS = ["-Wl,-undefined,error"])
 	else:
-		env.SharedLibrary(env["PLUGIN_DEST_DIR"] + "/nvgt_curl", ["internet.cpp", scriptarray], LIBS = [":libcurl.a", ":libz.a", ":libssl.a", ":libcrypto.a"], CPPDEFINES = ["CURL_STATICLIB"], LINKFLAGS = ["-Wl,--no-undefined"])
+		env.SharedLibrary(env["PLUGIN_DEST_DIR"] + "/nvgt_curl", ["internet.cpp", scriptarray], LIBS = [":libcurl.a", ":libz.a", ":libssl.a", ":libcrypto.a"], CPPDEFINES = ["CURL_STATICLIB"], LINKFLAGS = env["LINKFLAGS"] + ["-Wl,--no-undefined"])
 static = env.Object("internet_static", "internet.cpp", CPPDEFINES = [("NVGT_PLUGIN_STATIC", "nvgt_curl"), "CURL_STATICLIB"])
 static = env.StaticLibrary("#build/lib/nvgt_curl", [static], LIBS = ["curl"])
 static = [static, "curl"]

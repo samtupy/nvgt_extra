@@ -18,7 +18,7 @@ if ARGUMENTS.get("no_shared_plugins", "0") == "0":
 	elif env["NVGT_TARGET"] == "macos":
 		avxenv.SharedLibrary(avxenv["PLUGIN_DEST_DIR"] + "/nvgt_sqlite", ["nvgt_sqlite.cpp", scriptarray, scriptdictionary, sqlite_addons], LIBS = ["PocoFoundation", "pcre2-8"], LINKFLAGS = ["-Wl,-undefined,error"])
 	else:
-		avxenv.SharedLibrary(avxenv["PLUGIN_DEST_DIR"] + "/nvgt_sqlite", ["nvgt_sqlite.cpp", scriptarray, scriptdictionary, sqlite_addons], LIBS = ["PocoFoundation", ":libpcre2-8.a"], LINKFLAGS = ["-Wl,--no-undefined"])
+		avxenv.SharedLibrary(avxenv["PLUGIN_DEST_DIR"] + "/nvgt_sqlite", ["nvgt_sqlite.cpp", scriptarray, scriptdictionary, sqlite_addons], LIBS = ["PocoFoundation", ":libpcre2-8.a"], LINKFLAGS = avxenv["LINKFLAGS"] + ["-Wl,--no-undefined"])
 static = avxenv.Object("nvgt_sqlite_static", "nvgt_sqlite.cpp", CPPDEFINES = list(env["CPPDEFINES"]) + [("NVGT_PLUGIN_STATIC", "nvgt_sqlite")])
 static = avxenv.StaticLibrary("#build/lib/nvgt_sqlite", [static, sqlite_addons])
 Return("static")
